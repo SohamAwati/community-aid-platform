@@ -2,7 +2,7 @@ import { LocalDatabaseEngine } from "./database";
 
 type FilterOp = {
   column: string;
-  op: "eq" | "neq" | "in" | "gte" | "lte" | "gt" | "lt" | "ilike";
+  op: "eq" | "neq" | "in" | "not_in" | "gte" | "lte" | "gt" | "lt" | "ilike" | "is" | "not_is";
   value: unknown;
 };
 
@@ -92,6 +92,34 @@ export class LocalQueryBuilder<T = Record<string, unknown>> {
 
   public ilike(column: string, pattern: string): this {
     this.filters.push({ column, op: "ilike", value: pattern });
+    return this;
+  }
+
+  public not(column: string, op: string, value: unknown): this {
+    if (op === "is") {
+      this.filters.push({ column, op: "not_is", value });
+    } else if (op === "in") {
+      let list: unknown[] = [];
+      if (Array.isArray(value)) {
+        list = value;
+      } else if (typeof value === "string") {
+        list = value
+          .replace(/^[()]/, "")
+          .replace(/[()]$/, "")
+          .split(",")
+          .map((s) => s.trim().replace(/^["']|["']$/g, ""));
+      }
+      this.filters.push({ column, op: "not_in", value: list });
+    } else if (op === "eq") {
+      this.filters.push({ column, op: "neq", value });
+    } else {
+      this.filters.push({ column, op: "neq", value });
+    }
+    return this;
+  }
+
+  public is(column: string, value: unknown): this {
+    this.filters.push({ column, op: "is", value });
     return this;
   }
 
@@ -322,15 +350,42 @@ export class LocalQueryBuilder<T = Record<string, unknown>> {
       }
 
       switch (f.op) {
+        case "is":
+          if (f.value === null) {
+            if (val !== null && val !== undefined && val !== "") return false;
+          } else {
+            if (val !== f.value) return false;
+          }
+          break;
+        case "not_is":
+          if (f.value === null) {
+            if (val === null || val === undefined || val === "") return false;
+          } else {
+            if (val === f.value) return false;
+          }
+          break;
         case "eq":
-          if (String(val) !== String(f.value)) return false;
+          if (f.value === null) {
+            if (val !== null && val !== undefined && val !== "") return false;
+          } else {
+            if (String(val) !== String(f.value)) return false;
+          }
           break;
         case "neq":
-          if (String(val) === String(f.value)) return false;
+          if (f.value === null) {
+            if (val === null || val === undefined || val === "") return false;
+          } else {
+            if (String(val) === String(f.value)) return false;
+          }
           break;
         case "in": {
           const list = Array.isArray(f.value) ? f.value.map(String) : [];
           if (!list.includes(String(val))) return false;
+          break;
+        }
+        case "not_in": {
+          const list = Array.isArray(f.value) ? f.value.map(String) : [];
+          if (list.includes(String(val))) return false;
           break;
         }
         case "gte":

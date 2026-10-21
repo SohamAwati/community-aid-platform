@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Download, ExternalLink, FileText, Eye } from "lucide-react";
+import { Download, ExternalLink, FileText, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 
 /**
- * Safely converts any Data URL (Base64 or URI-encoded) or plain string to a binary Blob with its exact MIME type.
+ * Safely converts any Data URL (Base64 or URI-encoded) or direct URL into a binary Blob with its exact MIME type.
  * Inspects both header tokens and binary magic bytes to guarantee proper decoding.
  */
 export function dataUrlToBlob(dataUrl: string): { blob: Blob; mime: string; ext: string; isPdf: boolean; isImage: boolean } {
@@ -19,6 +19,18 @@ export function dataUrlToBlob(dataUrl: string): { blob: Blob; mime: string; ext:
     if (dataUrl.includes("<svg")) {
       const blob = new Blob([dataUrl], { type: "image/svg+xml" });
       return { blob, mime: "image/svg+xml", ext: "svg", isPdf: false, isImage: true };
+    }
+    // If it's already a blob or http(s) URL
+    if (dataUrl.startsWith("blob:") || dataUrl.startsWith("http://") || dataUrl.startsWith("https://")) {
+      const isImg = /\.(png|jpe?g|svg|webp|gif)(\?.*)?$/i.test(dataUrl);
+      const isPdfDoc = /\.(pdf)(\?.*)?$/i.test(dataUrl) || !isImg;
+      return {
+        blob: new Blob([], { type: isPdfDoc ? "application/pdf" : "image/jpeg" }),
+        mime: isPdfDoc ? "application/pdf" : "image/jpeg",
+        ext: isPdfDoc ? "pdf" : "jpg",
+        isPdf: isPdfDoc,
+        isImage: isImg,
+      };
     }
     const blob = new Blob([dataUrl], { type: "application/pdf" });
     return { blob, mime: "application/pdf", ext: "pdf", isPdf: true, isImage: false };
@@ -41,7 +53,16 @@ export function dataUrlToBlob(dataUrl: string): { blob: Blob; mime: string; ext:
   let bytes: Uint8Array;
   if (isBase64) {
     try {
-      const cleanBase64 = rawData.replace(/\s/g, "");
+      let cleanBase64 = rawData.replace(/\s/g, "");
+      if (cleanBase64.includes("%")) {
+        try {
+          cleanBase64 = decodeURIComponent(cleanBase64);
+        } catch {}
+      }
+      cleanBase64 = cleanBase64.replace(/[^A-Za-z0-9+/=]/g, "");
+      while (cleanBase64.length % 4 !== 0) {
+        cleanBase64 += "=";
+      }
       const binStr = atob(cleanBase64);
       const len = binStr.length;
       bytes = new Uint8Array(len);
@@ -131,7 +152,7 @@ export function downloadCertificate(dataUrl: string, title?: string): void {
     setTimeout(() => {
       document.body.removeChild(a);
       URL.revokeObjectURL(objectUrl);
-    }, 10000);
+    }, 15000);
 
     toast.success(`Certificate downloaded as .${ext.toUpperCase()}`);
   } catch (err) {
@@ -141,15 +162,51 @@ export function downloadCertificate(dataUrl: string, title?: string): void {
 }
 
 /**
- * Opens the certificate in a new browser tab using a native Blob URL so the browser can view it natively.
+ * Opens the certificate in a new browser tab safely by rendering inside a clean HTML shell.
+ * This avoids Chromium's top-level navigation block on blob URLs ("Not allowed to navigate top frame to blob URL").
  */
-export function openCertificateInNewTab(dataUrl: string): void {
+export function openCertificateInNewTab(dataUrl: string, title?: string): void {
   try {
-    const { blob } = dataUrlToBlob(dataUrl);
+    const { blob, isPdf, ext } = dataUrlToBlob(dataUrl);
     const objectUrl = URL.createObjectURL(blob);
-    const win = window.open(objectUrl, "_blank");
-    if (!win) {
-      toast.error("Popup was blocked. Please allow popups to view the certificate in a new tab.");
+    const docTitle = title || "Participation Certificate";
+
+    const win = window.open("", "_blank");
+    if (win) {
+      win.document.write(`<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>${docTitle} — Volunteer Connect</title>
+    <style>
+      body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #0f172a; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+      .bar { height: 48px; background: #1e293b; color: #f8fafc; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid #334155; }
+      .bar .title { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+      .bar .badge { background: rgba(16, 185, 129, 0.2); color: #34d399; font-size: 11px; padding: 2px 8px; border-radius: 9999px; border: 1px solid rgba(52, 211, 153, 0.3); font-weight: 600; }
+      .viewer { width: 100%; height: calc(100% - 48px); border: none; background: #ffffff; }
+      .img-wrap { width: 100%; height: calc(100% - 48px); display: flex; align-items: center; justify-content: center; padding: 24px; box-sizing: border-box; }
+      .img-wrap img { max-width: 100%; max-height: 100%; object-fit: contain; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); border-radius: 12px; }
+    </style>
+  </head>
+  <body>
+    <div class="bar">
+      <div class="title">
+        <span>${docTitle}</span>
+        <span class="badge">Official ${ext.toUpperCase()} Certificate</span>
+      </div>
+      <span style="font-size: 12px; color: #94a3b8;">Volunteer Connect Document Viewer</span>
+    </div>
+    ${
+      isPdf
+        ? `<iframe class="viewer" src="${objectUrl}" title="${docTitle}"></iframe>`
+        : `<div class="img-wrap"><img src="${objectUrl}" alt="${docTitle}" /></div>`
+    }
+  </body>
+</html>`);
+      win.document.close();
+    } else {
+      toast.error("Popup was blocked. Please allow popups to view certificate.");
     }
   } catch (err) {
     console.error("Open in new tab error:", err);
@@ -177,15 +234,18 @@ export function CertificatePreviewDialog({
     isImage: false,
     ext: "pdf",
   });
+  const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
     if (!url || !open) {
       if (blobUrl) URL.revokeObjectURL(blobUrl);
       setBlobUrl(null);
+      setHasError(false);
       return;
     }
 
     try {
+      setHasError(false);
       const { blob, isPdf, isImage, ext } = dataUrlToBlob(url);
       const bUrl = URL.createObjectURL(blob);
       setBlobUrl(bUrl);
@@ -196,6 +256,7 @@ export function CertificatePreviewDialog({
       };
     } catch (e) {
       console.error("Preview creation error:", e);
+      setHasError(true);
     }
   }, [url, open]);
 
@@ -204,43 +265,43 @@ export function CertificatePreviewDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[92vh] flex flex-col p-6">
-        <DialogHeader className="flex flex-row items-center justify-between pb-2 border-b border-border">
+        <DialogHeader className="flex flex-row items-center justify-between pb-3 border-b border-border">
           <div>
             <DialogTitle className="font-display text-xl flex items-center gap-2">
               <FileText className="size-5 text-primary" />
               {title || "Participation Certificate"}
             </DialogTitle>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Verified document uploaded by host NGO partner ({fileMeta.ext.toUpperCase()} document)
+            <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5">
+              <CheckCircle2 className="size-3.5 text-emerald-600" />
+              Verified Certificate Document ({fileMeta.ext.toUpperCase()})
             </p>
           </div>
         </DialogHeader>
 
-        <div className="flex-1 my-4 overflow-auto rounded-2xl bg-muted/30 border border-border flex items-center justify-center p-3 min-h-[440px]">
-          {blobUrl ? (
+        <div className="flex-1 my-4 overflow-hidden rounded-2xl bg-muted/30 border border-border flex items-center justify-center p-2 min-h-[460px]">
+          {hasError ? (
+            <div className="flex flex-col items-center justify-center p-8 text-center space-y-3">
+              <FileText className="size-12 text-destructive/70" />
+              <p className="text-base font-semibold">Unable to display document directly</p>
+              <p className="text-xs text-muted-foreground max-w-sm">
+                You can download the original certificate or view it in a separate window.
+              </p>
+              <div className="flex gap-2 pt-2">
+                <Button size="sm" onClick={() => openCertificateInNewTab(url, title)}>
+                  <ExternalLink className="size-3.5 mr-1" /> Open in New Window
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => downloadCertificate(url, title)}>
+                  <Download className="size-3.5 mr-1" /> Download
+                </Button>
+              </div>
+            </div>
+          ) : blobUrl ? (
             fileMeta.isPdf ? (
-              <object
-                data={`${blobUrl}#toolbar=1&navpanes=0`}
-                type="application/pdf"
-                className="w-full h-[580px] rounded-xl border border-border/80 bg-white"
-                title="Certificate PDF Viewer"
-              >
-                <div className="flex flex-col items-center justify-center h-full p-8 text-center space-y-3">
-                  <FileText className="size-12 text-primary/70" />
-                  <p className="text-base font-semibold">PDF Ready to View</p>
-                  <p className="text-xs text-muted-foreground max-w-sm">
-                    Click below to open the PDF document in a new tab or download it directly to your device.
-                  </p>
-                  <div className="flex gap-2 pt-2">
-                    <Button size="sm" onClick={() => openCertificateInNewTab(url)}>
-                      <ExternalLink className="size-3.5 mr-1" /> Open in New Tab
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => downloadCertificate(url, title)}>
-                      <Download className="size-3.5 mr-1" /> Download
-                    </Button>
-                  </div>
-                </div>
-              </object>
+              <iframe
+                src={blobUrl}
+                className="w-full h-[580px] rounded-xl border-0 bg-white shadow-sm"
+                title="Certificate Document Viewer"
+              />
             ) : (
               <img
                 src={blobUrl}
@@ -253,15 +314,15 @@ export function CertificatePreviewDialog({
           )}
         </div>
 
-        <DialogFooter className="flex flex-row items-center justify-between gap-3 pt-2 border-t border-border">
+        <DialogFooter className="flex flex-row items-center justify-between gap-3 pt-3 border-t border-border">
           <Button
             type="button"
             variant="ghost"
             size="sm"
             className="rounded-full gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-            onClick={() => openCertificateInNewTab(url)}
+            onClick={() => openCertificateInNewTab(url, title)}
           >
-            <ExternalLink className="size-3.5" /> Open in New Tab
+            <ExternalLink className="size-3.5" /> Open in New Window
           </Button>
 
           <div className="flex items-center gap-2">
@@ -269,7 +330,7 @@ export function CertificatePreviewDialog({
               type="button"
               variant="outline"
               size="sm"
-              className="rounded-full"
+              className="rounded-full text-xs"
               onClick={() => onOpenChange(false)}
             >
               Close
@@ -277,10 +338,10 @@ export function CertificatePreviewDialog({
             <Button
               type="button"
               size="sm"
-              className="rounded-full gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+              className="rounded-full gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm text-xs"
               onClick={() => downloadCertificate(url, title)}
             >
-              <Download className="size-3.5" /> Download File
+              <Download className="size-3.5" /> Download ({fileMeta.ext.toUpperCase()})
             </Button>
           </div>
         </DialogFooter>

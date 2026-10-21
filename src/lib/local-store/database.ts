@@ -190,6 +190,7 @@ export class LocalDatabaseEngine {
 
     // Always guarantee Super Admin exists
     this.ensureSuperAdmin();
+    this.ensureDefaultCertificates();
   }
 
   private ensureSuperAdmin() {
@@ -220,6 +221,36 @@ export class LocalDatabaseEngine {
     }
 
     this.persist();
+  }
+
+  private ensureDefaultCertificates() {
+    const certs = this.tables["certificates"] || [];
+    let updatedCerts = false;
+    for (const initCert of INITIAL_CERTIFICATES) {
+      if (!certs.some((c) => c.id === initCert.id)) {
+        certs.push({ ...initCert });
+        updatedCerts = true;
+      }
+    }
+    if (updatedCerts) {
+      this.tables["certificates"] = certs;
+    }
+
+    const apps = this.tables["applications"] || [];
+    let updatedApps = false;
+    for (const initApp of INITIAL_APPLICATIONS) {
+      if (!apps.some((a) => a.id === initApp.id)) {
+        apps.push({ ...initApp });
+        updatedApps = true;
+      }
+    }
+    if (updatedApps) {
+      this.tables["applications"] = apps;
+    }
+
+    if (updatedCerts || updatedApps) {
+      this.persist();
+    }
   }
 
   private resetToSeed() {
@@ -667,11 +698,27 @@ export class LocalDatabaseEngine {
               reader.readAsDataURL(file);
             });
           }
+          const cleanPath = path.replace(/^\/+/, "");
+          const withoutBucket = cleanPath.replace(new RegExp(`^${bucket}/`), "");
+
           this.files.set(`${bucket}:${path}`, content);
           this.files.set(path, content);
+          this.files.set(`${bucket}:${cleanPath}`, content);
+          this.files.set(cleanPath, content);
+          this.files.set(`${bucket}:${withoutBucket}`, content);
+          this.files.set(withoutBucket, content);
+
           this.persistFiles();
-          void idbSetFile(`${bucket}:${path}`, content);
-          void idbSetFile(path, content);
+
+          await Promise.all([
+            idbSetFile(`${bucket}:${path}`, content),
+            idbSetFile(path, content),
+            idbSetFile(`${bucket}:${cleanPath}`, content),
+            idbSetFile(cleanPath, content),
+            idbSetFile(`${bucket}:${withoutBucket}`, content),
+            idbSetFile(withoutBucket, content),
+          ]);
+
           return { data: { path }, error: null };
         } catch (e) {
           return { data: null, error: e as Error };
@@ -679,26 +726,75 @@ export class LocalDatabaseEngine {
       },
       remove: async (paths: string[]) => {
         for (const p of paths) {
+          const cleanPath = p.replace(/^\/+/, "");
+          const withoutBucket = cleanPath.replace(new RegExp(`^${bucket}/`), "");
           this.files.delete(`${bucket}:${p}`);
           this.files.delete(p);
+          this.files.delete(`${bucket}:${cleanPath}`);
+          this.files.delete(cleanPath);
+          this.files.delete(`${bucket}:${withoutBucket}`);
+          this.files.delete(withoutBucket);
           void idbDeleteFile(`${bucket}:${p}`);
           void idbDeleteFile(p);
+          void idbDeleteFile(`${bucket}:${cleanPath}`);
+          void idbDeleteFile(cleanPath);
+          void idbDeleteFile(`${bucket}:${withoutBucket}`);
+          void idbDeleteFile(withoutBucket);
         }
         this.persistFiles();
         return { data: paths, error: null };
       },
       createSignedUrl: async (path: string, _expiresIn: number, _opts?: { download?: boolean }) => {
-        let url = this.files.get(`${bucket}:${path}`) || this.files.get(path);
+        if (!path) {
+          return { data: null, error: new Error("File path is required") };
+        }
+        if (path.startsWith("data:") || path.startsWith("blob:") || path.startsWith("http:") || path.startsWith("https:")) {
+          return { data: { signedUrl: path }, error: null };
+        }
+
+        const cleanPath = path.replace(/^\/+/, "");
+        const withoutBucket = cleanPath.replace(new RegExp(`^${bucket}/`), "");
+
+        let url =
+          this.files.get(`${bucket}:${path}`) ||
+          this.files.get(path) ||
+          this.files.get(`${bucket}:${cleanPath}`) ||
+          this.files.get(cleanPath) ||
+          this.files.get(`${bucket}:${withoutBucket}`) ||
+          this.files.get(withoutBucket);
+
         if (!url && typeof window !== "undefined") {
-          url = (await idbGetFile(`${bucket}:${path}`)) || (await idbGetFile(path)) || undefined;
+          url =
+            (await idbGetFile(`${bucket}:${path}`)) ||
+            (await idbGetFile(path)) ||
+            (await idbGetFile(`${bucket}:${cleanPath}`)) ||
+            (await idbGetFile(cleanPath)) ||
+            (await idbGetFile(`${bucket}:${withoutBucket}`)) ||
+            (await idbGetFile(withoutBucket)) ||
+            undefined;
+
           if (url) {
             this.files.set(`${bucket}:${path}`, url);
             this.files.set(path, url);
+            this.files.set(cleanPath, url);
+            this.files.set(withoutBucket, url);
           }
         }
+
+        // Fuzzy match if needed
+        if (!url) {
+          for (const [k, v] of this.files.entries()) {
+            if (k.endsWith(withoutBucket) || (withoutBucket && k.includes(withoutBucket))) {
+              url = v;
+              break;
+            }
+          }
+        }
+
         if (url) {
           return { data: { signedUrl: url }, error: null };
         }
+
         // Fallback placeholder verified certificate data-URI
         const fallbackSvg = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
           `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="550" viewBox="0 0 800 550"><rect width="800" height="550" fill="#f8fafc" stroke="#2563eb" stroke-width="8"/><text x="400" y="140" font-family="Arial, sans-serif" font-size="28" font-weight="bold" fill="#1e3a8a" text-anchor="middle">VOLUNTEER CONNECT</text><text x="400" y="190" font-family="Arial, sans-serif" font-size="20" fill="#64748b" text-anchor="middle">OFFICIAL PARTICIPATION CERTIFICATE</text><text x="400" y="290" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#0f172a" text-anchor="middle">COMMUNITY CIVIC SERVICE AWARD</text><text x="400" y="340" font-family="Arial, sans-serif" font-size="16" fill="#475569" text-anchor="middle">Awarded in recognition of active volunteering and dedication.</text><text x="400" y="470" font-family="Arial, sans-serif" font-size="14" fill="#16a34a" font-weight="bold" text-anchor="middle">&#10003; Verified by Host NGO</text></svg>`
@@ -706,7 +802,16 @@ export class LocalDatabaseEngine {
         return { data: { signedUrl: fallbackSvg }, error: null };
       },
       getPublicUrl: (path: string) => {
-        const url = this.files.get(`${bucket}:${path}`) || this.files.get(path) || `https://volunteer-connect.local/storage/${bucket}/${path}`;
+        const cleanPath = path.replace(/^\/+/, "");
+        const withoutBucket = cleanPath.replace(new RegExp(`^${bucket}/`), "");
+        const url =
+          this.files.get(`${bucket}:${path}`) ||
+          this.files.get(path) ||
+          this.files.get(`${bucket}:${cleanPath}`) ||
+          this.files.get(cleanPath) ||
+          this.files.get(`${bucket}:${withoutBucket}`) ||
+          this.files.get(withoutBucket) ||
+          `https://volunteer-connect.local/storage/${bucket}/${cleanPath}`;
         return { data: { publicUrl: url } };
       },
     }),

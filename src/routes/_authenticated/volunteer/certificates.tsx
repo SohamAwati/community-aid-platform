@@ -44,12 +44,11 @@ function MyCertificates() {
         supabase
           .from("applications")
           .select("id,opportunity_id,certificate_url,created_at,completed_at,opportunities(id,title,ngos(name))")
-          .eq("volunteer_id", user!.id)
-          .not("certificate_url", "is", null),
+          .eq("volunteer_id", user!.id),
       ]);
 
       const certs = certsRes.data ?? [];
-      const apps = appsRes.data ?? [];
+      const apps = (appsRes.data ?? []).filter((a: any) => Boolean(a.certificate_url));
 
       const map = new Map<string, CombinedCertificate>();
 
@@ -69,13 +68,14 @@ function MyCertificates() {
       // 2. Add or merge uploaded certificates
       for (const a of apps) {
         const opp = a.opportunities as { id?: string; title?: string; ngos?: { name?: string } | null } | null;
-        const existing = map.get(a.opportunity_id);
+        const key = a.opportunity_id || a.id;
+        const existing = map.get(key) || (a.opportunity_id ? map.get(a.opportunity_id) : undefined);
         if (existing) {
           existing.uploadedPath = a.certificate_url as string;
         } else {
-          map.set(a.opportunity_id, {
+          map.set(key, {
             id: a.id,
-            opportunityId: a.opportunity_id,
+            opportunityId: a.opportunity_id || a.id,
             title: opp?.title || "Volunteering Initiative",
             ngoName: opp?.ngos?.name || "Verified NGO Partner",
             issuedAt: a.completed_at || a.created_at,
