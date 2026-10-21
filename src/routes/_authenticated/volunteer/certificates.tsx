@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { pageMeta } from "@/lib/page-meta";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useAuth } from "@/lib/auth";
@@ -7,7 +8,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Award, BadgeCheck, Download, FileText } from "lucide-react";
+import { Award, BadgeCheck, Download, FileText, Eye } from "lucide-react";
+import { downloadCertificate, CertificatePreviewDialog } from "@/lib/certificate-file";
 
 export const Route = createFileRoute("/_authenticated/volunteer/certificates")({
   head: () => ({ meta: pageMeta("My certificates — Volunteer Connect", "View, verify and download the certificates you earned for completed volunteering.") }),
@@ -26,6 +28,8 @@ type CombinedCertificate = {
 
 function MyCertificates() {
   const { user } = useAuth();
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewTitle, setPreviewTitle] = useState<string | undefined>(undefined);
 
   const { data: certsList, isLoading } = useQuery<CombinedCertificate[]>({
     enabled: !!user,
@@ -84,17 +88,17 @@ function MyCertificates() {
     },
   });
 
-  const download = async (path: string, oppTitle?: string) => {
+  const handleDownload = async (path: string, oppTitle?: string) => {
     const { data, error } = await supabase.storage.from("certificates").createSignedUrl(path, 300, { download: true });
     if (error || !data) { toast.error("Could not download file"); return; }
-    const a = document.createElement("a");
-    a.href = data.signedUrl;
-    const ext = data.signedUrl.startsWith("data:image/svg") ? "svg" : data.signedUrl.startsWith("data:image/png") ? "png" : "pdf";
-    a.download = `certificate-${(oppTitle || "volunteer").toLowerCase().replace(/[^a-z0-9]/g, "-")}.${ext}`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    toast.success("Certificate download started!");
+    downloadCertificate(data.signedUrl, oppTitle);
+  };
+
+  const handleView = async (path: string, oppTitle?: string) => {
+    const { data, error } = await supabase.storage.from("certificates").createSignedUrl(path, 300);
+    if (error || !data) { toast.error("Could not load certificate"); return; }
+    setPreviewTitle(oppTitle || "Participation Certificate");
+    setPreviewUrl(data.signedUrl);
   };
 
   return (
@@ -120,8 +124,6 @@ function MyCertificates() {
       ) : (
         <div className="space-y-4">
           {certsList.map((c) => {
-            const hasBoth = !!c.uploadedPath && !!c.digitalCert;
-
             return (
               <Card key={c.id} className="overflow-hidden border border-border/80 shadow-sm transition hover:shadow-md">
                 <CardContent className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-5">
@@ -146,15 +148,25 @@ function MyCertificates() {
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 pt-2 sm:pt-0">
-                    {/* NGO Uploaded Certificate Button */}
+                    {/* NGO Uploaded Certificate Buttons */}
                     {c.uploadedPath && (
-                      <Button
-                        size="sm"
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-full gap-1.5 text-xs shadow-sm"
-                        onClick={() => download(c.uploadedPath!, c.title)}
-                      >
-                        <Download className="size-3.5" /> Download Uploaded Certificate
-                      </Button>
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="rounded-full gap-1.5 text-xs border-emerald-500/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+                          onClick={() => handleView(c.uploadedPath!, c.title)}
+                        >
+                          <Eye className="size-3.5" /> View Certificate
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-full gap-1.5 text-xs shadow-sm"
+                          onClick={() => handleDownload(c.uploadedPath!, c.title)}
+                        >
+                          <Download className="size-3.5" /> Download
+                        </Button>
+                      </>
                     )}
 
                     {/* Verifiable Digital Certificate Button */}
@@ -172,6 +184,14 @@ function MyCertificates() {
           })}
         </div>
       )}
+
+      {/* Certificate In-App Preview Dialog */}
+      <CertificatePreviewDialog
+        open={!!previewUrl}
+        onOpenChange={(open) => !open && setPreviewUrl(null)}
+        url={previewUrl}
+        title={previewTitle}
+      />
     </div>
   );
 }

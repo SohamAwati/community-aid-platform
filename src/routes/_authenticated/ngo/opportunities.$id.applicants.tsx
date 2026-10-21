@@ -8,10 +8,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ArrowLeft, Check, X, Award, BadgeCheck, Upload, UserCheck, UserX, FileText, Mail, MessageSquare, Phone, Copy } from "lucide-react";
+import { ArrowLeft, Check, X, Award, BadgeCheck, Upload, UserCheck, UserX, FileText, Mail, MessageSquare, Phone, Copy, Download } from "lucide-react";
 import { toast } from "sonner";
 import { useState } from "react";
 import { BASE_FIELDS, answersRecord, parseQuestions } from "@/lib/questions";
+import { downloadCertificate, CertificatePreviewDialog } from "@/lib/certificate-file";
 
 export const Route = createFileRoute("/_authenticated/ngo/opportunities/$id/applicants")({
   head: () => ({ meta: pageMeta("Applicants — Volunteer Connect", "Review applicants, decisions, attendance, and certificates.") }),
@@ -23,6 +24,8 @@ type Profile = { full_name?: string; city?: string; state?: string; country?: st
 function Applicants() {
   const { id } = Route.useParams();
   const qc = useQueryClient();
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewTitle, setPreviewTitle] = useState<string | undefined>(undefined);
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ["applicants", id] });
     qc.invalidateQueries({ queryKey: ["opp-certs", id] });
@@ -212,10 +215,17 @@ function Applicants() {
     update.mutate({ appId, patch: { certificate_url: null } });
   };
 
-  const viewFile = async (path: string) => {
+  const viewFile = async (path: string, volName?: string) => {
     const { data, error } = await supabase.storage.from("certificates").createSignedUrl(path, 300);
     if (error || !data) { toast.error("Could not open file"); return; }
-    window.open(data.signedUrl, "_blank");
+    setPreviewTitle(volName ? `${volName} - Participation Certificate` : "Participation Certificate");
+    setPreviewUrl(data.signedUrl);
+  };
+
+  const downloadFile = async (path: string, volName?: string) => {
+    const { data, error } = await supabase.storage.from("certificates").createSignedUrl(path, 300, { download: true });
+    if (error || !data) { toast.error("Could not download file"); return; }
+    downloadCertificate(data.signedUrl, volName || opp?.title);
   };
 
   const exportCsv = () => {
@@ -431,10 +441,28 @@ function Applicants() {
 
                         {a.certificate_url && (
                           <>
-                            <Button size="sm" variant="outline" className="rounded-full text-xs gap-1" onClick={() => viewFile(a.certificate_url!)}>
-                              <FileText className="size-3.5 text-primary" /> View Uploaded
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="rounded-full text-xs gap-1 border-primary/40 text-primary"
+                              onClick={() => viewFile(a.certificate_url!, (a.profiles as Profile)?.full_name || undefined)}
+                            >
+                              <FileText className="size-3.5" /> View Certificate
                             </Button>
-                            <Button size="sm" variant="ghost" className="rounded-full text-xs text-destructive hover:bg-destructive/10" onClick={() => removeFile(a.id, a.certificate_url!)}>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="rounded-full text-xs gap-1 text-emerald-700 dark:text-emerald-400 border-emerald-500/40 hover:bg-emerald-50 dark:hover:bg-emerald-950/20"
+                              onClick={() => downloadFile(a.certificate_url!, (a.profiles as Profile)?.full_name || undefined)}
+                            >
+                              <Download className="size-3.5" /> Download
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="rounded-full text-xs text-destructive hover:bg-destructive/10"
+                              onClick={() => removeFile(a.id, a.certificate_url!)}
+                            >
                               Delete
                             </Button>
                           </>
@@ -586,6 +614,14 @@ function Applicants() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Certificate In-App Preview Dialog */}
+      <CertificatePreviewDialog
+        open={!!previewUrl}
+        onOpenChange={(open) => !open && setPreviewUrl(null)}
+        url={previewUrl}
+        title={previewTitle}
+      />
     </div>
   );
 }

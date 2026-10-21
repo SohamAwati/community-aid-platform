@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { pageMeta } from "@/lib/page-meta";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useAuth } from "@/lib/auth";
@@ -6,8 +7,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { BadgeCheck, Download, Check, Sparkles, Award, FileText, ArrowRight } from "lucide-react";
+import { BadgeCheck, Download, Check, Sparkles, Award, Eye } from "lucide-react";
 import { toast } from "sonner";
+import { downloadCertificate, CertificatePreviewDialog } from "@/lib/certificate-file";
 
 export const Route = createFileRoute("/_authenticated/volunteer/applications")({
   head: () => ({ meta: pageMeta("My applications — Volunteer Connect", "Track your applications and NGO decisions.") }),
@@ -16,6 +18,9 @@ export const Route = createFileRoute("/_authenticated/volunteer/applications")({
 
 function VolApps() {
   const { user } = useAuth();
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewTitle, setPreviewTitle] = useState<string | undefined>(undefined);
+
   const { data } = useQuery({
     enabled: !!user,
     queryKey: ["my-apps", user?.id],
@@ -33,17 +38,17 @@ function VolApps() {
     queryFn: async () => (await supabase.from("certificates").select("code,opportunity_id,hours").eq("volunteer_id", user!.id)).data ?? [],
   });
 
-  const download = async (path: string, title?: string) => {
+  const handleDownload = async (path: string, title?: string) => {
     const { data, error } = await supabase.storage.from("certificates").createSignedUrl(path, 300, { download: true });
     if (error || !data) { toast.error("Could not download file"); return; }
-    const a = document.createElement("a");
-    a.href = data.signedUrl;
-    const ext = data.signedUrl.startsWith("data:image/svg") ? "svg" : data.signedUrl.startsWith("data:image/png") ? "png" : "pdf";
-    a.download = `certificate-${(title || "volunteer").toLowerCase().replace(/[^a-z0-9]/g, "-")}.${ext}`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    toast.success("Certificate download started!");
+    downloadCertificate(data.signedUrl, title);
+  };
+
+  const handleView = async (path: string, title?: string) => {
+    const { data, error } = await supabase.storage.from("certificates").createSignedUrl(path, 300);
+    if (error || !data) { toast.error("Could not load certificate"); return; }
+    setPreviewTitle(title || "Participation Certificate");
+    setPreviewUrl(data.signedUrl);
   };
 
   return (
@@ -103,13 +108,23 @@ function VolApps() {
 
                     <div className="flex flex-wrap items-center gap-2">
                       {a.certificate_url && (
-                        <Button
-                          size="sm"
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-full gap-1.5 shadow-sm text-xs"
-                          onClick={() => download(a.certificate_url!, o?.title)}
-                        >
-                          <Download className="size-3.5" /> Download Certificate
-                        </Button>
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="rounded-full gap-1.5 text-xs border-emerald-500/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+                            onClick={() => handleView(a.certificate_url!, o?.title)}
+                          >
+                            <Eye className="size-3.5" /> View Certificate
+                          </Button>
+                          <Button
+                            size="sm"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-full gap-1.5 shadow-sm text-xs"
+                            onClick={() => handleDownload(a.certificate_url!, o?.title)}
+                          >
+                            <Download className="size-3.5" /> Download
+                          </Button>
+                        </>
                       )}
                       {cert && (
                         <Button asChild size="sm" variant={a.certificate_url ? "outline" : "default"} className="rounded-full gap-1.5 text-xs border-primary/40 text-primary hover:bg-primary/10">
@@ -153,6 +168,14 @@ function VolApps() {
           })}
         </div>
       )}
+
+      {/* Certificate In-App Preview Dialog */}
+      <CertificatePreviewDialog
+        open={!!previewUrl}
+        onOpenChange={(open) => !open && setPreviewUrl(null)}
+        url={previewUrl}
+        title={previewTitle}
+      />
     </div>
   );
 }
