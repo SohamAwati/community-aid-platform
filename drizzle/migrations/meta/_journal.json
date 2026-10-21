@@ -1,0 +1,83 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1789899303013,
+      "tag": "0000_public_certificate_verification",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1789978927177,
+      "tag": "0001_set_my_role_rpc",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789978961817,
+      "tag": "0002_assign_missing_roles",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790495454022,
+      "tag": "0003_opportunity_template_and_attendance",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790495467667,
+      "tag": "0004_private_certificate_files",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790946180962,
+      "tag": "0005_extend_ngo_and_profile_details",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791015665966,
+      "tag": "0006_applicant_emails_fn",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791016560143,
+      "tag": "0007_security_hardening",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791125533327,
+      "tag": "0008_ngo_delete_certificate_files",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792237306190,
+      "tag": "0009_workflow_acceptance_guards_and_reports",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792395917843,
+      "tag": "0010_protect_ngo_verification_decisions",
+      "breakpoints": true
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+ALTER TABLE public.ngos ADD COLUMN IF NOT EXISTS address text, ADD COLUMN IF NOT EXISTS state text, ADD COLUMN IF NOT EXISTS postal_code text, ADD COLUMN IF NOT EXISTS registration_number text, ADD COLUMN IF NOT EXISTS contact_person text;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS first_name text, ADD COLUMN IF NOT EXISTS last_name text, ADD COLUMN IF NOT EXISTS state text, ADD COLUMN IF NOT EXISTS occupation_status text, ADD COLUMN IF NOT EXISTS organization text;

@@ -1,0 +1,16 @@
+{
+  "name": "Volunteer Connect",
+  "short_name": "VolunteerConnect",
+  "description": "Connecting Non-Governmental Organizations with volunteers for social causes.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#60a5fa",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ]
+}

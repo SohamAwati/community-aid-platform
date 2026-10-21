@@ -1,0 +1,1 @@
+CREATE POLICY "NGO owners delete certificate files" ON storage.objects FOR DELETE TO authenticated USING (bucket_id = 'certificates' AND public.can_manage_application(auth.uid(), ((storage.foldername(name))[1])::uuid));
