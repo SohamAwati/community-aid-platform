@@ -111,8 +111,8 @@ function VolApps() {
                           <Download className="size-3.5" /> Download Certificate
                         </Button>
                       )}
-                      {cert && !a.certificate_url && (
-                        <Button asChild size="sm" variant="outline" className="rounded-full gap-1.5 text-xs border-primary/40 text-primary">
+                      {cert && (
+                        <Button asChild size="sm" variant={a.certificate_url ? "outline" : "default"} className="rounded-full gap-1.5 text-xs border-primary/40 text-primary hover:bg-primary/10">
                           <Link to="/certificates/$code" params={{ code: cert.code }}>
                             <BadgeCheck className="size-3.5" /> Digital Certificate · {cert.hours ?? 0}h
                           </Link>

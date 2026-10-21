@@ -379,8 +379,8 @@ export class LocalDatabaseEngine {
     provider: string;
     options?: { redirectTo?: string; skipBrowserRedirect?: boolean };
   }): Promise<{ data: { provider: string; url: string | null }; error: Error | null }> {
-    // Quick demonstration / OAuth simulation
-    const demoUser = INITIAL_USERS[1]; // Soham Chandan
+    // Quick demonstration / OAuth simulation - Vaishnavi Nimse
+    const demoUser = INITIAL_USERS[0]; // Vaishnavi Nimse (Super Admin)
     const sessionUser: LocalUser = {
       id: demoUser.id,
       email: demoUser.email,
@@ -404,7 +404,7 @@ export class LocalDatabaseEngine {
     this.notifyAuthChange("SIGNED_IN", session);
 
     return {
-      data: { provider: params.provider, url: params.options?.redirectTo || "/dashboard" },
+      data: { provider: params.provider, url: params.options?.redirectTo || "/admin" },
       error: null,
     };
   }
