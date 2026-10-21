@@ -665,13 +665,23 @@ function VolunteerDashboardView({ user, isSuperAdmin }: { user: any; isSuperAdmi
                 <Sparkles className="mr-1.5 size-4" /> Find Opportunities
               </Link>
             </Button>
-            <Button asChild variant="outline" className="rounded-full">
-              <Link to="/profile">Edit Profile</Link>
+            <Button asChild variant="outline" className="rounded-full shadow-sm border-emerald-500/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30">
+              <Link to="/volunteer/applications">
+                <FileText className="mr-1.5 size-4 text-emerald-600" /> My Applications
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="rounded-full shadow-sm border-primary/40 text-primary hover:bg-primary/10">
+              <Link to="/volunteer/certificates">
+                <Award className="mr-1.5 size-4 text-primary" /> My Certificates
+              </Link>
             </Button>
             <Button asChild variant="ghost" className="rounded-full">
               <Link to="/leaderboard">
                 <Trophy className="mr-1.5 size-4 text-amber-500" /> Leaderboard
               </Link>
+            </Button>
+            <Button asChild variant="outline" className="rounded-full">
+              <Link to="/profile">Edit Profile</Link>
             </Button>
             {isSuperAdmin && (
               <Button asChild variant="outline" className="rounded-full border-amber-500/40 text-amber-600">
@@ -714,6 +724,61 @@ function VolunteerDashboardView({ user, isSuperAdmin }: { user: any; isSuperAdmi
           helper="Points earned through action"
           color="text-purple-500"
         />
+      </div>
+
+      {/* Quick Access to Applications & Certificates Portfolio */}
+      <div className="mt-8 grid gap-4 sm:grid-cols-2">
+        <Link to="/volunteer/applications" className="group block">
+          <Card className="border border-border/80 bg-card/60 p-5 shadow-sm transition hover:border-emerald-500/50 hover:shadow-md">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3.5">
+                <div className="flex size-11 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 group-hover:scale-105 transition-transform">
+                  <FileText className="size-6 text-emerald-600" />
+                </div>
+                <div>
+                  <h3 className="font-display text-base font-semibold text-foreground group-hover:text-emerald-600 transition-colors flex items-center gap-1.5">
+                    My Applications
+                    {applications.length > 0 && (
+                      <Badge className="ml-1 bg-emerald-600/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 text-[11px]">
+                        {applications.length} submitted
+                      </Badge>
+                    )}
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Track statuses, NGO decisions, view marked attendance, and download certificates
+                  </p>
+                </div>
+              </div>
+              <ArrowRight className="size-4 text-muted-foreground group-hover:text-emerald-600 group-hover:translate-x-1 transition" />
+            </div>
+          </Card>
+        </Link>
+
+        <Link to="/volunteer/certificates" className="group block">
+          <Card className="border border-border/80 bg-card/60 p-5 shadow-sm transition hover:border-blue-500/50 hover:shadow-md">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3.5">
+                <div className="flex size-11 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600 group-hover:scale-105 transition-transform">
+                  <Award className="size-6 text-blue-600" />
+                </div>
+                <div>
+                  <h3 className="font-display text-base font-semibold text-foreground group-hover:text-blue-600 transition-colors flex items-center gap-1.5">
+                    My Certificates
+                    {certificates.length > 0 && (
+                      <Badge className="ml-1 bg-blue-600/15 text-blue-700 dark:text-blue-400 border border-blue-500/30 text-[11px]">
+                        {certificates.length} earned
+                      </Badge>
+                    )}
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Access verifiable digital credentials, preview documents, and download official files
+                  </p>
+                </div>
+              </div>
+              <ArrowRight className="size-4 text-muted-foreground group-hover:text-blue-600 group-hover:translate-x-1 transition" />
+            </div>
+          </Card>
+        </Link>
       </div>
 
       {/* Confirmed Schedule / Commitments */}

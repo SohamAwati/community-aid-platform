@@ -39,6 +39,12 @@ export function SiteHeader() {
             <Link to="/opportunities" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Opportunities</Link>
           )}
           {user && !isNgoAdmin && (
+            <Link to="/volunteer/applications" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">My Applications</Link>
+          )}
+          {user && !isNgoAdmin && (
+            <Link to="/volunteer/certificates" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">My Certificates</Link>
+          )}
+          {user && !isNgoAdmin && (
             <Link to="/leaderboard" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Leaderboard</Link>
           )}
           <Link to="/about" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">About</Link>
@@ -70,8 +76,9 @@ export function SiteHeader() {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild><Link to="/dashboard">Dashboard</Link></DropdownMenuItem>
                 <DropdownMenuItem asChild><Link to="/profile">Profile</Link></DropdownMenuItem>
-                {!isNgoAdmin && <DropdownMenuItem asChild><Link to="/volunteers/$id" params={{ id: user.id }}>My portfolio</Link></DropdownMenuItem>}
+                {!isNgoAdmin && <DropdownMenuItem asChild><Link to="/volunteer/applications">My applications</Link></DropdownMenuItem>}
                 {!isNgoAdmin && <DropdownMenuItem asChild><Link to="/volunteer/certificates">My certificates</Link></DropdownMenuItem>}
+                {!isNgoAdmin && <DropdownMenuItem asChild><Link to="/volunteers/$id" params={{ id: user.id }}>My portfolio</Link></DropdownMenuItem>}
                 {!isNgoAdmin && <DropdownMenuItem asChild><Link to="/teams">Teams</Link></DropdownMenuItem>}
                 {!isNgoAdmin && <DropdownMenuItem asChild><Link to="/leaderboard">Leaderboard</Link></DropdownMenuItem>}
                 {isNgoAdmin && <DropdownMenuItem asChild><Link to="/ngo/opportunities">Manage opportunities</Link></DropdownMenuItem>}
@@ -104,6 +111,12 @@ export function SiteHeader() {
               <Link to="/ngo/opportunities" onClick={() => setOpen(false)} className="rounded-md px-3 py-2 text-sm hover:bg-muted">Manage Opportunities</Link>
             ) : (
               <Link to="/opportunities" onClick={() => setOpen(false)} className="rounded-md px-3 py-2 text-sm hover:bg-muted">Opportunities</Link>
+            )}
+            {user && !isNgoAdmin && (
+              <Link to="/volunteer/applications" onClick={() => setOpen(false)} className="rounded-md px-3 py-2 text-sm hover:bg-muted font-medium text-primary">My Applications</Link>
+            )}
+            {user && !isNgoAdmin && (
+              <Link to="/volunteer/certificates" onClick={() => setOpen(false)} className="rounded-md px-3 py-2 text-sm hover:bg-muted">My Certificates</Link>
             )}
             {user && !isNgoAdmin && (
               <Link to="/leaderboard" onClick={() => setOpen(false)} className="rounded-md px-3 py-2 text-sm hover:bg-muted">Leaderboard</Link>
