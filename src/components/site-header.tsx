@@ -33,8 +33,14 @@ export function SiteHeader() {
         </Link>
 
         <nav className="hidden items-center gap-8 md:flex">
-          <Link to="/opportunities" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Opportunities</Link>
-          <Link to="/leaderboard" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Leaderboard</Link>
+          {isNgoAdmin && !isSuperAdmin ? (
+            <Link to="/ngo/opportunities" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Manage Opportunities</Link>
+          ) : (
+            <Link to="/opportunities" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Opportunities</Link>
+          )}
+          {user && !isNgoAdmin && (
+            <Link to="/leaderboard" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Leaderboard</Link>
+          )}
           <Link to="/about" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">About</Link>
           <Link to="/faq" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">FAQ</Link>
         </nav>
@@ -67,7 +73,7 @@ export function SiteHeader() {
                 {!isNgoAdmin && <DropdownMenuItem asChild><Link to="/volunteers/$id" params={{ id: user.id }}>My portfolio</Link></DropdownMenuItem>}
                 {!isNgoAdmin && <DropdownMenuItem asChild><Link to="/volunteer/certificates">My certificates</Link></DropdownMenuItem>}
                 {!isNgoAdmin && <DropdownMenuItem asChild><Link to="/teams">Teams</Link></DropdownMenuItem>}
-                <DropdownMenuItem asChild><Link to="/leaderboard">Leaderboard</Link></DropdownMenuItem>
+                {!isNgoAdmin && <DropdownMenuItem asChild><Link to="/leaderboard">Leaderboard</Link></DropdownMenuItem>}
                 {isNgoAdmin && <DropdownMenuItem asChild><Link to="/ngo/opportunities">Manage opportunities</Link></DropdownMenuItem>}
                 {isNgoAdmin && <DropdownMenuItem asChild><Link to="/ngo/profile">NGO profile & settings</Link></DropdownMenuItem>}
                 {isSuperAdmin && <DropdownMenuItem asChild><Link to="/admin">Admin panel</Link></DropdownMenuItem>}
@@ -94,7 +100,14 @@ export function SiteHeader() {
       {open && (
         <div className="border-t border-border bg-background md:hidden">
           <div className="mx-auto flex max-w-7xl flex-col gap-1 px-4 py-3">
-            <Link to="/opportunities" onClick={() => setOpen(false)} className="rounded-md px-3 py-2 text-sm hover:bg-muted">Opportunities</Link>
+            {isNgoAdmin && !isSuperAdmin ? (
+              <Link to="/ngo/opportunities" onClick={() => setOpen(false)} className="rounded-md px-3 py-2 text-sm hover:bg-muted">Manage Opportunities</Link>
+            ) : (
+              <Link to="/opportunities" onClick={() => setOpen(false)} className="rounded-md px-3 py-2 text-sm hover:bg-muted">Opportunities</Link>
+            )}
+            {user && !isNgoAdmin && (
+              <Link to="/leaderboard" onClick={() => setOpen(false)} className="rounded-md px-3 py-2 text-sm hover:bg-muted">Leaderboard</Link>
+            )}
             <Link to="/about" onClick={() => setOpen(false)} className="rounded-md px-3 py-2 text-sm hover:bg-muted">About</Link>
             <Link to="/faq" onClick={() => setOpen(false)} className="rounded-md px-3 py-2 text-sm hover:bg-muted">FAQ</Link>
             <Link to="/contact" onClick={() => setOpen(false)} className="rounded-md px-3 py-2 text-sm hover:bg-muted">Contact</Link>

@@ -12,10 +12,11 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { BASE_FIELDS, parseQuestions, type CustomQuestion } from "@/lib/questions";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Ban } from "lucide-react";
 import { toast } from "sonner";
 import { applicationBlockReason } from "@/lib/workflow-rules";
 import { isValidPhone } from "@/lib/utils";
+import { isUserSuspended } from "@/lib/suspension";
 
 export const Route = createFileRoute("/_authenticated/apply/$id")({
   head: () => ({ meta: pageMeta("Apply — Volunteer Connect", "Submit your details for a volunteering opportunity.") }),
@@ -73,9 +74,12 @@ function ApplyPage() {
   const extra = parseQuestions(o?.custom_questions);
   const all: CustomQuestion[] = [...BASE_FIELDS, ...extra];
 
+  const userSuspended = isUserSuspended(user?.id);
+
   const submit = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error("Please sign in");
+      if (userSuspended) throw new Error("Your account has been suspended by the platform administrator. You are not permitted to apply for opportunities.");
       if (blocked) throw new Error(blocked);
       const clean: Record<string, string> = {};
       for (const q of all) {
@@ -130,7 +134,22 @@ function ApplyPage() {
           </div>
         </CardHeader>
         <CardContent>
-          {existing ? (
+          {userSuspended ? (
+            <div className="space-y-4 rounded-2xl border border-destructive/40 bg-destructive/10 p-6 text-center text-destructive">
+              <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-destructive/20 text-destructive">
+                <Ban className="size-6" />
+              </div>
+              <div>
+                <h3 className="font-display text-lg font-bold">Account Suspended</h3>
+                <p className="mt-1 text-sm text-destructive/90 max-w-md mx-auto">
+                  Your account has been suspended by the platform administrator. You are not permitted to apply for volunteering opportunities. Please contact support.
+                </p>
+              </div>
+              <Button asChild variant="outline" className="rounded-full border-destructive/30">
+                <Link to="/opportunities">Return to Opportunities</Link>
+              </Button>
+            </div>
+          ) : existing ? (
             <div className="space-y-3 text-center">
               <p>You've already applied — status: <span className="font-semibold capitalize">{existing.status}</span></p>
               <Button asChild className="rounded-full"><Link to="/volunteer/applications">View my applications</Link></Button>

@@ -84,10 +84,17 @@ export function OpportunityForm({ editId }: { editId?: string }) {
   const updateQ = (id: string, patch: Partial<CustomQuestion>) =>
     setQuestions((qs) => qs.map((q) => (q.id === id ? { ...q, ...patch } : q)));
 
+  const now = new Date();
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  const localToday = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  const localNowISO = `${localToday}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  const minStartDate = editId ? undefined : localNowISO;
+  const minEndDate = f.starts_at || localNowISO;
+
   const submit = async (status: "draft" | "published") => {
     if (!ngo) { toast.error("Register your NGO first"); return; }
     if (status === "published" && ngo.status !== "verified") { toast.error("NGO must be verified"); return; }
-    const validation = validateOpportunity(f);
+    const validation = validateOpportunity(f, !!editId);
     if (validation) { toast.error(validation); return; }
     const cleanQs = questions.filter((q) => q.label.trim()).map((q) => ({ ...q, label: q.label.trim().slice(0, 300) }));
     setBusy(true);
@@ -154,13 +161,42 @@ export function OpportunityForm({ editId }: { editId?: string }) {
       <Card>
         <CardHeader><CardTitle>2. Schedule & slots</CardTitle></CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
-          <Field label="Starts"><Input type="datetime-local" value={f.starts_at} onChange={(e) => setF({ ...f, starts_at: e.target.value })} /></Field>
-          <Field label="Ends"><Input type="datetime-local" value={f.ends_at} onChange={(e) => setF({ ...f, ends_at: e.target.value })} /></Field>
+          <Field label="Starts (cannot be in past)">
+            <Input
+              type="datetime-local"
+              min={minStartDate}
+              value={f.starts_at}
+              onChange={(e) => {
+                const newStart = e.target.value;
+                setF((prev) => ({
+                  ...prev,
+                  starts_at: newStart,
+                  ends_at: prev.ends_at && prev.ends_at <= newStart ? newStart : prev.ends_at,
+                }));
+              }}
+            />
+          </Field>
+          <Field label="Ends (must follow start date)">
+            <Input
+              type="datetime-local"
+              min={minEndDate}
+              value={f.ends_at}
+              onChange={(e) => setF({ ...f, ends_at: e.target.value })}
+            />
+          </Field>
           <Field label="Duration"><Input value={f.duration} onChange={(e) => setF({ ...f, duration: e.target.value })} placeholder="4 weeks, weekends" /></Field>
           <Field label="Estimated hours"><Input type="number" min={0} value={f.hours_estimate} onChange={(e) => setF({ ...f, hours_estimate: Number(e.target.value) })} /></Field>
           <Field label="Slots"><Input type="number" min={1} value={f.slots} onChange={(e) => setF({ ...f, slots: Number(e.target.value) })} /></Field>
           <Field label="Minimum age"><Input type="number" min={0} value={f.min_age} onChange={(e) => setF({ ...f, min_age: Number(e.target.value) })} /></Field>
-          <Field label="Application deadline"><Input type="date" value={f.application_deadline} onChange={(e) => setF({ ...f, application_deadline: e.target.value })} /></Field>
+          <Field label="Application deadline">
+            <Input
+              type="date"
+              min={localToday}
+              max={f.starts_at ? f.starts_at.slice(0, 10) : undefined}
+              value={f.application_deadline}
+              onChange={(e) => setF({ ...f, application_deadline: e.target.value })}
+            />
+          </Field>
           <Field label="Contact email"><Input type="email" value={f.contact_email} onChange={(e) => setF({ ...f, contact_email: e.target.value })} /></Field>
         </CardContent>
       </Card>

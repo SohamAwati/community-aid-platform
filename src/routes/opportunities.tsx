@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, SlidersHorizontal, Sparkles, TrendingUp, MapPin, Clock } from "lucide-react";
+import { Search, SlidersHorizontal, Sparkles, TrendingUp, MapPin, Clock, Building2, Plus, ArrowRight } from "lucide-react";
 
 const searchSchema = z.object({
   q: z.string().optional(),
@@ -59,7 +59,45 @@ const TABS = [
 
 function OppList() {
   const initial = Route.useSearch();
-  const { user } = useAuth();
+  const { user, isNgoAdmin, isSuperAdmin } = useAuth();
+
+  if (isNgoAdmin && !isSuperAdmin) {
+    return (
+      <div className="mx-auto max-w-4xl px-4 py-16 sm:px-6 lg:px-8">
+        <div className="relative overflow-hidden rounded-3xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-background p-8 text-center sm:p-12 shadow-sm">
+          <div className="mx-auto flex size-16 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-lg">
+            <Building2 className="size-8" />
+          </div>
+          <h1 className="mt-6 font-display text-2xl sm:text-3xl font-bold tracking-tight">
+            Browse Opportunities Directory
+          </h1>
+          <p className="mt-3 max-w-xl mx-auto text-base text-muted-foreground">
+            The Browse Opportunities directory is designed for Volunteers and Super Admins to discover and apply for volunteering drives.
+          </p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            As an NGO partner, your organization drives, listings, and volunteer applicant rosters are managed through your dedicated NGO Workspace.
+          </p>
+          <div className="mt-8 flex flex-wrap justify-center gap-4">
+            <Button asChild size="lg" className="rounded-full bg-emerald-600 hover:bg-emerald-700 shadow-sm">
+              <Link to="/ngo/opportunities">
+                Manage My Opportunities
+              </Link>
+            </Button>
+            <Button asChild size="lg" variant="outline" className="rounded-full border-emerald-500/30">
+              <Link to="/ngo/opportunities/new">
+                <Plus className="mr-1.5 size-4" /> Post New Opportunity
+              </Link>
+            </Button>
+            <Button asChild size="lg" variant="ghost" className="rounded-full">
+              <Link to="/dashboard">
+                NGO Dashboard <ArrowRight className="ml-1.5 size-4" />
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
   const [q, setQ] = useState(initial.q ?? "");
   const [category, setCategory] = useState<string>(initial.category ?? "all");
   const [locationMode, setLocationMode] = useState<string>(initial.location_mode ?? "all");

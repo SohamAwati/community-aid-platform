@@ -17,6 +17,7 @@ import { useState } from "react";
 import { ReportModeration } from "@/components/report-moderation";
 import { CATEGORIES, CATEGORY_LABEL, type CategoryKey } from "@/lib/categories";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
+import { getSuspendedUserIds, setUserSuspended } from "@/lib/suspension";
 
 export const Route = createFileRoute("/_authenticated/admin")({
   head: () => ({ meta: pageMeta("Admin panel — Volunteer Connect", "Review NGO verification, manage users, moderate opportunities, and view analytics.") }),
@@ -44,15 +45,7 @@ export function AdminPanel() {
     return [];
   });
 
-  const [suspendedUsers, setSuspendedUsers] = useState<Set<string>>(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("vc_suspended_users");
-      if (saved) {
-        try { return new Set(JSON.parse(saved)); } catch {}
-      }
-    }
-    return new Set<string>();
-  });
+  const [suspendedUsers, setSuspendedUsers] = useState<Set<string>>(() => getSuspendedUserIds());
 
   // Overview metrics
   const { data: overview } = useQuery({
@@ -204,12 +197,13 @@ export function AdminPanel() {
     if (wasSuspended) {
       next.delete(userId);
       toast.success(`Account for ${name || "User"} activated`);
+      void setUserSuspended(userId, false);
     } else {
       next.add(userId);
       toast.error(`Account for ${name || "User"} suspended`);
+      void setUserSuspended(userId, true);
     }
     setSuspendedUsers(next);
-    localStorage.setItem("vc_suspended_users", JSON.stringify(Array.from(next)));
   };
 
   const addCustomCategory = (e: React.FormEvent) => {

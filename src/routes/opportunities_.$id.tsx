@@ -13,9 +13,10 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { OpportunityCard, type OpportunityCardData } from "@/components/opportunity-card";
 import { CATEGORY_LABEL, type CategoryKey } from "@/lib/categories";
 import { BASE_FIELDS, parseQuestions } from "@/lib/questions";
-import { MapPin, Calendar, Users, Clock, ShieldCheck, ArrowLeft, Bookmark, Share2, Wallet, Award, ClipboardList, UserCheck, Zap, Navigation, Phone, Mail, Check, AlertCircle } from "lucide-react";
+import { MapPin, Calendar, Users, Clock, ShieldCheck, ArrowLeft, Bookmark, Share2, Wallet, Award, ClipboardList, UserCheck, Zap, Navigation, Phone, Mail, Check, AlertCircle, Ban } from "lucide-react";
 import { toast } from "sonner";
 import { isValidEmail, isValidPhone } from "@/lib/utils";
+import { isUserSuspended } from "@/lib/suspension";
 
 export const Route = createFileRoute("/opportunities_/$id")({
   head: () => ({ meta: pageMeta("Volunteer opportunity — Volunteer Connect", "See the details, perks and application form for this volunteering opportunity.") }),
@@ -93,9 +94,15 @@ function OpportunityDetail() {
   const [applicantName, setApplicantName] = useState("");
   const [submittingQuick, setSubmittingQuick] = useState(false);
 
+  const userSuspended = isUserSuspended(user?.id);
+
   const openQuickApply = async () => {
     if (!user) {
       navigate({ to: "/auth", search: { mode: "signin" } as never });
+      return;
+    }
+    if (userSuspended) {
+      toast.error("Your account has been suspended by the platform administrator. You are not permitted to apply for opportunities.");
       return;
     }
     const { data: profile } = await supabase
@@ -113,6 +120,10 @@ function OpportunityDetail() {
 
   const submitQuickApply = async () => {
     if (!user) return;
+    if (userSuspended) {
+      toast.error("Your account has been suspended by the administrator. You cannot apply for opportunities.");
+      return;
+    }
     if (!isValidPhone(applicantPhone)) {
       toast.error("Please enter a valid 10-digit phone number (e.g. +91 9876543210)");
       return;
@@ -181,6 +192,10 @@ function OpportunityDetail() {
 
   const handleApply = () => {
     if (!user) { navigate({ to: "/auth", search: { mode: "signin" } as never }); return; }
+    if (userSuspended) {
+      toast.error("Your account has been suspended by the platform administrator. You are not permitted to apply for opportunities.");
+      return;
+    }
     navigate({ to: "/apply/$id", params: { id } });
   };
 
@@ -287,7 +302,16 @@ function OpportunityDetail() {
               {o.application_deadline && <Row icon={ClipboardList} label="Apply by">{new Date(o.application_deadline).toLocaleDateString(undefined, { dateStyle: "medium" })}</Row>}
             </dl>
             <div className="mt-6 space-y-2">
-              {myApp ? (
+              {userSuspended ? (
+                <div className="rounded-2xl border border-destructive/40 bg-destructive/10 p-4 text-center text-destructive">
+                  <div className="flex items-center justify-center gap-1.5 font-semibold text-xs uppercase tracking-wider">
+                    <Ban className="size-4" /> Account Suspended
+                  </div>
+                  <p className="mt-1 text-xs text-destructive/90">
+                    Your account has been suspended by the administrator. You are not permitted to apply for opportunities.
+                  </p>
+                </div>
+              ) : myApp ? (
                 <>
                   <Button asChild variant="secondary" className="w-full rounded-full capitalize">
                     <Link to="/volunteer/applications">Application {myApp.status}</Link>
