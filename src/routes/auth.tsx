@@ -13,6 +13,7 @@ import { useAuth } from "@/lib/auth";
 import { useEffect } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertCircle } from "lucide-react";
+import { isValidEmail, isValidPhone } from "@/lib/utils";
 
 const authSearchSchema = z.object({
   mode: z.enum(["signin", "signup"]).optional(),
@@ -34,6 +35,9 @@ function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [city, setCity] = useState("Pune");
+  const [experience, setExperience] = useState("");
   const [busy, setBusy] = useState(false);
   const [googleSetupOpen, setGoogleSetupOpen] = useState(false);
 
@@ -94,25 +98,54 @@ function AuthPage() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
+    if (mode === "signup") {
+      if (!isValidEmail(email)) {
+        toast.error("Please enter a valid email address (e.g. name@domain.com)");
+        setBusy(false);
+        return;
+      }
+      if (!isValidPhone(phone)) {
+        toast.error("Please enter a valid 10-digit phone number (e.g. +91 9876543210)");
+        setBusy(false);
+        return;
+      }
+      if (!city.trim()) {
+        toast.error("Please provide your city of residence");
+        setBusy(false);
+        return;
+      }
+      if (role === "volunteer" && !experience.trim()) {
+        toast.error("Please briefly mention your experience or skills");
+        setBusy(false);
+        return;
+      }
+    }
+
     try {
       if (mode === "signup") {
         const { data, error } = await supabase.auth.signUp({
-          email,
+          email: email.trim(),
           password,
           options: {
             emailRedirectTo: `${window.location.origin}/auth`,
-            data: { full_name: fullName, requested_role: role },
+            data: {
+              full_name: fullName.trim(),
+              phone: phone.trim(),
+              city: city.trim(),
+              experience: experience.trim(),
+              requested_role: role,
+            },
           },
         });
         if (error) throw error;
         if (!data.session) {
-          toast.success("Account registered! Click the link in your email to activate it and sign in.");
+          toast.success("Account registered! Please sign in.");
           setMode("signin");
           return;
         }
         toast.success("Account created and signed in!");
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
         if (error) throw error;
         toast.success("Welcome back!");
       }
@@ -185,14 +218,31 @@ function AuthPage() {
 
           <form onSubmit={submit} className="space-y-3">
             {mode === "signup" && (
-              <div>
-                <Label htmlFor="name">Full name</Label>
-                <Input id="name" required value={fullName} onChange={(e) => setFullName(e.target.value)} />
-              </div>
+              <>
+                <div>
+                  <Label htmlFor="name">Full name *</Label>
+                  <Input id="name" required placeholder="John Doe" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+                </div>
+                <div>
+                  <Label htmlFor="phone">Phone number *</Label>
+                  <Input id="phone" type="tel" required placeholder="+91 98765 43210" value={phone} onChange={(e) => setPhone(e.target.value)} />
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">NGOs will contact you on this number.</p>
+                </div>
+                <div>
+                  <Label htmlFor="city">City of residence *</Label>
+                  <Input id="city" required placeholder="e.g. Pune, Maharashtra" value={city} onChange={(e) => setCity(e.target.value)} />
+                </div>
+                {role === "volunteer" && (
+                  <div>
+                    <Label htmlFor="exp">Volunteering experience or skills *</Label>
+                    <Input id="exp" required placeholder="e.g. 2 years tutoring, animal rescue, or coding" value={experience} onChange={(e) => setExperience(e.target.value)} />
+                  </div>
+                )}
+              </>
             )}
             <div>
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+              <Label htmlFor="email">Email *</Label>
+              <Input id="email" type="email" required placeholder="name@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
             </div>
             <div>
               <div className="flex items-center justify-between">

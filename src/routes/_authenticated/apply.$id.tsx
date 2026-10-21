@@ -1,7 +1,7 @@
 import { pageMeta } from "@/lib/page-meta";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import { BASE_FIELDS, parseQuestions, type CustomQuestion } from "@/lib/question
 import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { applicationBlockReason } from "@/lib/workflow-rules";
+import { isValidPhone } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/apply/$id")({
   head: () => ({ meta: pageMeta("Apply — Volunteer Connect", "Submit your details for a volunteering opportunity.") }),
@@ -27,6 +28,26 @@ function ApplyPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [answers, setAnswers] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!user) return;
+    void supabase
+      .from("profiles")
+      .select("city,phone,experience,availability")
+      .eq("id", user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setAnswers((prev) => ({
+            city: data.city || prev.city || "",
+            phone: data.phone || prev.phone || "",
+            experience: data.experience || prev.experience || "",
+            availability: data.availability || prev.availability || "",
+            ...prev,
+          }));
+        }
+      });
+  }, [user]);
 
   const { data: o } = useQuery({
     queryKey: ["opportunity", id],
@@ -62,13 +83,29 @@ function ApplyPage() {
         if (q.required && !v) throw new Error(`Please answer: ${q.label}`);
         if (v) clean[q.id] = v;
       }
-      if (clean.phone && !/^[+0-9 ()-]{6,20}$/.test(clean.phone)) throw new Error("Please enter a valid phone number");
+      if (clean.phone && !isValidPhone(clean.phone)) {
+        throw new Error("Please enter a valid 10-digit phone number (e.g. +91 9876543210)");
+      }
       const message = all.filter((q) => clean[q.id]).map((q) => `${q.label}: ${clean[q.id]}`).join("\n");
       const { error } = await supabase.from("applications").insert({
         opportunity_id: id, volunteer_id: user.id, message: message || null, answers: clean,
       });
       if (error) throw error;
-      if (clean.phone) await supabase.from("profiles").update({ phone: clean.phone }).eq("id", user.id);
+      const profileUpdates: Record<string, string> = {};
+      if (clean.phone) profileUpdates.phone = clean.phone;
+      if (clean.city) profileUpdates.city = clean.city;
+      if (clean.experience) profileUpdates.experience = clean.experience;
+      if (Object.keys(profileUpdates).length) await supabase.from("profiles").update(profileUpdates).eq("id", user.id);
+
+      // Notify the NGO
+      if (o?.ngo_id) {
+        await supabase.from("notifications").insert({
+          user_id: o.ngo_id,
+          title: `New Applicant for "${o.title}"`,
+          body: `A volunteer from ${clean.city || "your area"} has submitted their application.`,
+          link: `/ngo/opportunities/${id}/applicants`,
+        });
+      }
     },
     onSuccess: () => {
       toast.success("Application submitted! The organisation will review it.");

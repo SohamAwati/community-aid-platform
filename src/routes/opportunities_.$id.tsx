@@ -1,16 +1,21 @@
 import { pageMeta } from "@/lib/page-meta";
 import { createFileRoute, Link, notFound, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { OpportunityCard, type OpportunityCardData } from "@/components/opportunity-card";
 import { CATEGORY_LABEL, type CategoryKey } from "@/lib/categories";
 import { BASE_FIELDS, parseQuestions } from "@/lib/questions";
-import { MapPin, Calendar, Users, Clock, ShieldCheck, ArrowLeft, Bookmark, Share2, Wallet, Award, ClipboardList, UserCheck, Zap, Navigation } from "lucide-react";
+import { MapPin, Calendar, Users, Clock, ShieldCheck, ArrowLeft, Bookmark, Share2, Wallet, Award, ClipboardList, UserCheck, Zap, Navigation, Phone, Mail, Check, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+import { isValidEmail, isValidPhone } from "@/lib/utils";
 
 export const Route = createFileRoute("/opportunities_/$id")({
   head: () => ({ meta: pageMeta("Volunteer opportunity — Volunteer Connect", "See the details, perks and application form for this volunteering opportunity.") }),
@@ -81,38 +86,91 @@ function OpportunityDetail() {
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
   });
 
-  const quickApply = useMutation({
-    mutationFn: async () => {
-      if (!user) throw new Error("Please sign in to apply");
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("full_name,phone,bio,experience")
-        .eq("id", user.id)
-        .maybeSingle();
+  const [quickApplyOpen, setQuickApplyOpen] = useState(false);
+  const [applicantCity, setApplicantCity] = useState("");
+  const [applicantPhone, setApplicantPhone] = useState("");
+  const [applicantExp, setApplicantExp] = useState("");
+  const [applicantName, setApplicantName] = useState("");
+  const [submittingQuick, setSubmittingQuick] = useState(false);
 
-      const message = profile?.experience
-        ? `Applied via 1-Click Quick Apply. Experience: ${profile.experience}`
-        : "Applied via 1-Click Quick Apply using profile details.";
+  const openQuickApply = async () => {
+    if (!user) {
+      navigate({ to: "/auth", search: { mode: "signin" } as never });
+      return;
+    }
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("full_name,phone,city,state,country,experience,occupation_status,organization")
+      .eq("id", user.id)
+      .maybeSingle();
 
+    setApplicantName(profile?.full_name || user.email?.split("@")[0] || "Volunteer");
+    setApplicantCity(profile?.city || "Pune");
+    setApplicantPhone(profile?.phone || "");
+    setApplicantExp(profile?.experience || "Passionate volunteer ready to contribute time and skills.");
+    setQuickApplyOpen(true);
+  };
+
+  const submitQuickApply = async () => {
+    if (!user) return;
+    if (!isValidPhone(applicantPhone)) {
+      toast.error("Please enter a valid 10-digit phone number (e.g. +91 9876543210)");
+      return;
+    }
+    if (!applicantCity.trim()) {
+      toast.error("Please provide your city of residence");
+      return;
+    }
+    if (!applicantExp.trim()) {
+      toast.error("Please share your volunteering experience or key skills");
+      return;
+    }
+
+    setSubmittingQuick(true);
+    try {
+      // 1. Update user profile to ensure phone, city, experience are saved for future 1-click applications
+      await supabase.from("profiles").update({
+        phone: applicantPhone.trim(),
+        city: applicantCity.trim(),
+        experience: applicantExp.trim(),
+      }).eq("id", user.id);
+
+      // 2. Submit application with complete applicant details
       const { error } = await supabase.from("applications").insert({
         opportunity_id: id,
         volunteer_id: user.id,
-        message,
+        status: "pending",
+        message: `Applied via 1-Click Quick Apply.\nCity: ${applicantCity.trim()}\nPhone: ${applicantPhone.trim()}\nEmail: ${user.email}\nExperience: ${applicantExp.trim()}`,
         answers: {
-          phone: profile?.phone ?? "",
-          full_name: profile?.full_name ?? "",
-          bio: profile?.bio ?? "",
+          full_name: applicantName,
+          email: user.email ?? "",
+          phone: applicantPhone.trim(),
+          city: applicantCity.trim(),
+          experience: applicantExp.trim(),
         },
       });
       if (error) throw error;
-    },
-    onSuccess: () => {
+
+      // 3. Notify the NGO
+      if (o?.ngo_id) {
+        await supabase.from("notifications").insert({
+          user_id: o.ngo_id,
+          title: `New Applicant: ${applicantName}`,
+          body: `${applicantName} from ${applicantCity.trim()} has applied for "${o.title}". Phone: ${applicantPhone.trim()}`,
+          link: `/ngo/opportunities/${id}/applicants`,
+        });
+      }
+
       toast.success("Application submitted successfully! The organization will review your profile.");
+      setQuickApplyOpen(false);
       qc.invalidateQueries({ queryKey: ["my-app", id, user?.id] });
       qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
-    },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "Quick apply failed"),
-  });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Quick apply failed");
+    } finally {
+      setSubmittingQuick(false);
+    }
+  };
 
   if (isLoading) return <div className="mx-auto max-w-4xl px-4 py-16"><div className="h-96 animate-pulse rounded-2xl bg-muted" /></div>;
   if (!o) return null;
@@ -241,15 +299,12 @@ function OpportunityDetail() {
               ) : (
                 <>
                   <Button
-                    onClick={() => {
-                      if (!user) { navigate({ to: "/auth", search: { mode: "signin" } as never }); return; }
-                      quickApply.mutate();
-                    }}
-                    disabled={closed || quickApply.isPending}
-                    className="w-full gap-2 rounded-full shadow-sm"
+                    onClick={openQuickApply}
+                    disabled={closed}
+                    className="w-full gap-2 rounded-full shadow-sm bg-primary hover:bg-primary/90 text-primary-foreground font-medium"
                   >
                     <Zap className="size-4" />
-                    {quickApply.isPending ? "Submitting..." : "1-Click Quick Apply"}
+                    1-Click Quick Apply
                   </Button>
                   <Button
                     onClick={handleApply}
@@ -282,6 +337,88 @@ function OpportunityDetail() {
           </div>
         </section>
       )}
+
+      {/* 1-Click Quick Apply Confirmation Modal */}
+      <Dialog open={quickApplyOpen} onOpenChange={setQuickApplyOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-primary">
+              <Zap className="size-3.5" /> 1-Click Quick Apply
+            </div>
+            <DialogTitle className="font-display text-xl">
+              Apply to {o.title}
+            </DialogTitle>
+            <DialogDescription>
+              Review your complete applicant details below. These will be provided directly to {o.ngos?.name || "the NGO"}.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2 text-sm">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <Label className="text-xs font-medium text-muted-foreground">Full Name *</Label>
+                <Input value={applicantName} onChange={(e) => setApplicantName(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs font-medium text-muted-foreground">Email Address (Verified)</Label>
+                <Input value={user?.email || ""} disabled className="bg-muted/50 text-muted-foreground" />
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <Label className="text-xs font-medium text-muted-foreground">City of Residence *</Label>
+                <Input
+                  required
+                  placeholder="e.g. Pune, Maharashtra"
+                  value={applicantCity}
+                  onChange={(e) => setApplicantCity(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs font-medium text-muted-foreground">Phone Number * (10 Digits)</Label>
+                <Input
+                  type="tel"
+                  required
+                  placeholder="+91 98765 43210"
+                  value={applicantPhone}
+                  onChange={(e) => setApplicantPhone(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs font-medium text-muted-foreground">Relevant Experience & Skills *</Label>
+              <Textarea
+                rows={3}
+                required
+                placeholder="Share your volunteering background, key skills, or hobbies..."
+                value={applicantExp}
+                onChange={(e) => setApplicantExp(e.target.value)}
+              />
+            </div>
+
+            <div className="rounded-xl border bg-muted/40 p-3 text-xs text-muted-foreground flex items-start gap-2">
+              <Check className="size-4 text-emerald-600 mt-0.5 shrink-0" />
+              <span>Your phone number and city of residence will be verified and saved to your profile for seamless future applications.</span>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setQuickApplyOpen(false)} disabled={submittingQuick}>
+              Cancel
+            </Button>
+            <Button
+              onClick={submitQuickApply}
+              disabled={submittingQuick}
+              className="gap-2 rounded-full font-medium"
+            >
+              <Zap className="size-4" />
+              {submittingQuick ? "Submitting..." : "Confirm & Submit (1-Click)"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </article>
   );
 }

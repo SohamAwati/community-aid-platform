@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { BadgeCheck, Download } from "lucide-react";
+import { BadgeCheck, Download, Check, Sparkles, Award, FileText, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/volunteer/applications")({
@@ -30,49 +30,122 @@ function VolApps() {
   const { data: certs } = useQuery({
     enabled: !!user,
     queryKey: ["my-certificates-map", user?.id],
-    queryFn: async () => (await supabase.from("certificates").select("code,opportunity_id").eq("volunteer_id", user!.id)).data ?? [],
+    queryFn: async () => (await supabase.from("certificates").select("code,opportunity_id,hours").eq("volunteer_id", user!.id)).data ?? [],
   });
 
-  const download = async (path: string) => {
+  const download = async (path: string, title?: string) => {
     const { data, error } = await supabase.storage.from("certificates").createSignedUrl(path, 300, { download: true });
     if (error || !data) { toast.error("Could not download file"); return; }
-    window.open(data.signedUrl, "_blank");
+    const a = document.createElement("a");
+    a.href = data.signedUrl;
+    const ext = data.signedUrl.startsWith("data:image/svg") ? "svg" : data.signedUrl.startsWith("data:image/png") ? "png" : "pdf";
+    a.download = `certificate-${(title || "volunteer").toLowerCase().replace(/[^a-z0-9]/g, "-")}.${ext}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    toast.success("Certificate download started!");
   };
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:px-8">
-      <h1 className="mb-6 font-display text-3xl font-semibold tracking-tight">My applications</h1>
+      <div className="mb-6">
+        <h1 className="font-display text-3xl font-semibold tracking-tight">My Applications</h1>
+        <p className="text-sm text-muted-foreground mt-1">Track your volunteer application statuses, NGO decisions, attendance, and earned certificates.</p>
+      </div>
+
       {!data || data.length === 0 ? (
         <Card><CardContent className="p-10 text-center text-muted-foreground">
           <p>You haven't applied to anything yet.</p>
           <Button asChild className="mt-4 rounded-full"><Link to="/opportunities">Find opportunities</Link></Button>
         </CardContent></Card>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {data.map((a) => {
             const o = a.opportunities as { id: string; title: string; city?: string; ngos?: { name: string } } | null;
             const cert = (certs ?? []).find((c) => c.opportunity_id === a.opportunity_id);
+            const isAccepted = a.status === "accepted";
+            const isCompleted = a.status === "completed";
+
             return (
-              <Card key={a.id}>
-                <CardContent className="space-y-3 p-5">
-                  <div className="flex flex-wrap items-center gap-4">
+              <Card key={a.id} className={`overflow-hidden transition ${isAccepted ? "border-emerald-500/40 shadow-sm" : ""}`}>
+                <CardContent className="space-y-3.5 p-5">
+                  <div className="flex flex-wrap items-center justify-between gap-4">
                     <div className="min-w-0 flex-1">
-                      <div className="mb-1 flex flex-wrap items-center gap-2">
-                        <Badge variant={a.status === "accepted" || a.status === "completed" ? "default" : a.status === "rejected" ? "destructive" : "secondary"} className="capitalize">{a.status}</Badge>
-                        {a.attendance && <Badge variant="outline" className="capitalize">Attendance: {a.attendance}</Badge>}
+                      <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                        {isAccepted ? (
+                          <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1 font-medium">
+                            <Check className="size-3" /> Application Accepted 🎉
+                          </Badge>
+                        ) : isCompleted ? (
+                          <Badge className="bg-blue-600 hover:bg-blue-700 text-white gap-1 font-medium">
+                            <Award className="size-3" /> Completed &amp; Certified
+                          </Badge>
+                        ) : (
+                          <Badge variant={a.status === "rejected" ? "destructive" : "secondary"} className="capitalize">
+                            {a.status === "pending" ? "Under Review by NGO ⏳" : a.status}
+                          </Badge>
+                        )}
+
+                        {a.attendance && (
+                          <Badge
+                            variant={a.attendance === "present" ? "default" : "outline"}
+                            className={`text-xs ${a.attendance === "present" ? "bg-emerald-100 text-emerald-800 border-emerald-300" : ""}`}
+                          >
+                            Attendance: {a.attendance === "present" ? "Present ✅" : "Absent"}
+                          </Badge>
+                        )}
                         <span className="text-xs text-muted-foreground">Applied {new Date(a.created_at).toLocaleDateString()}</span>
                       </div>
+
                       <div className="font-display text-lg font-semibold">{o?.title}</div>
                       <div className="text-sm text-muted-foreground">{o?.ngos?.name} · {o?.city ?? "—"}</div>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      {a.certificate_url && <Button size="sm" className="rounded-full" onClick={() => download(a.certificate_url!)}><Download className="size-4" /> Download certificate</Button>}
-                      {cert && !a.certificate_url && <Button asChild size="sm" variant="outline" className="rounded-full"><Link to="/certificates/$code" params={{ code: cert.code }}><BadgeCheck className="size-4" /> Digital certificate</Link></Button>}
-                      {o && <Button asChild variant="outline" size="sm" className="rounded-full"><Link to="/opportunities/$id" params={{ id: o.id }}>View</Link></Button>}
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      {a.certificate_url && (
+                        <Button
+                          size="sm"
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-full gap-1.5 shadow-sm text-xs"
+                          onClick={() => download(a.certificate_url!, o?.title)}
+                        >
+                          <Download className="size-3.5" /> Download Certificate
+                        </Button>
+                      )}
+                      {cert && !a.certificate_url && (
+                        <Button asChild size="sm" variant="outline" className="rounded-full gap-1.5 text-xs border-primary/40 text-primary">
+                          <Link to="/certificates/$code" params={{ code: cert.code }}>
+                            <BadgeCheck className="size-3.5" /> Digital Certificate · {cert.hours ?? 0}h
+                          </Link>
+                        </Button>
+                      )}
+                      {o && (
+                        <Button asChild variant="outline" size="sm" className="rounded-full text-xs">
+                          <Link to="/opportunities/$id" params={{ id: o.id }}>
+                            View Event
+                          </Link>
+                        </Button>
+                      )}
                     </div>
                   </div>
+
+                  {/* ACCEPTED BANNER */}
+                  {isAccepted && (
+                    <div className="rounded-xl border border-emerald-500/30 bg-emerald-50/60 dark:bg-emerald-950/20 p-3 text-xs text-emerald-800 dark:text-emerald-300 flex items-start gap-2.5">
+                      <Sparkles className="size-4 mt-0.5 text-emerald-600 shrink-0" />
+                      <div>
+                        <span className="font-semibold">Congratulations! Your application has been accepted.</span>
+                        <p className="mt-0.5 text-emerald-700 dark:text-emerald-400">
+                          {o?.ngos?.name} has selected you for this volunteering drive. Please be prepared and on time. Your attendance will be marked on the day of the event.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* REJECTION REASON */}
                   {a.status === "rejected" && a.rejection_reason && (
-                    <p className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">Reason from NGO: {a.rejection_reason}</p>
+                    <p className="rounded-lg bg-destructive/10 p-3 text-xs text-destructive">
+                      <span className="font-semibold">Feedback from NGO:</span> {a.rejection_reason}
+                    </p>
                   )}
                 </CardContent>
               </Card>

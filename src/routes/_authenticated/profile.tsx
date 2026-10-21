@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Upload, User, Camera } from "lucide-react";
+import { isValidPhone } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/profile")({
   head: () => ({ meta: pageMeta("My profile — Volunteer Connect", "Manage your volunteer contact details, skills, and experience.") }),
@@ -89,6 +90,18 @@ function ProfilePage() {
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+    if (!isValidPhone(form.phone)) {
+      toast.error("Please enter a valid 10-digit phone number (e.g. +91 9876543210)");
+      return;
+    }
+    if (!form.city.trim()) {
+      toast.error("Please enter your city of residence");
+      return;
+    }
+    if (!form.experience.trim()) {
+      toast.error("Please enter your previous volunteering, work, or skills experience");
+      return;
+    }
     if (!form.occupation_status) { toast.error("Please select Working or Student"); return; }
     setSaving(true);
     const { error } = await supabase.from("profiles").upsert({

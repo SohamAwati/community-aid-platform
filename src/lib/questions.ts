@@ -23,10 +23,11 @@ export function parseQuestions(raw: unknown): CustomQuestion[] {
 
 /** Base questions every application form contains. */
 export const BASE_FIELDS = [
+  { id: "city", label: "City of residence", type: "text", required: true },
+  { id: "phone", label: "Phone number (10 Digits)", type: "text", required: true },
+  { id: "experience", label: "Relevant volunteering experience / skills", type: "textarea", required: true },
   { id: "motivation", label: "Why do you want to volunteer here?", type: "textarea", required: true },
-  { id: "experience", label: "Relevant experience / skills", type: "textarea", required: false },
-  { id: "availability", label: "Your availability", type: "text", required: true },
-  { id: "phone", label: "Phone number", type: "text", required: true },
+  { id: "availability", label: "Your availability (e.g. Weekends)", type: "text", required: true },
 ] as const satisfies readonly CustomQuestion[];
 
 export function answersRecord(raw: unknown): Record<string, string> {

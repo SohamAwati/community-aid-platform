@@ -124,14 +124,85 @@ function Applicants() {
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
   });
 
-  const upload = async (appId: string, file: File) => {
+  const acceptApplication = async (appId: string, volunteerId: string, volunteerName: string) => {
+    try {
+      const { error } = await supabase.from("applications").update({
+        status: "accepted",
+        rejection_reason: null,
+      }).eq("id", appId);
+      if (error) throw error;
+
+      await supabase.from("notifications").insert({
+        user_id: volunteerId,
+        title: "Application Accepted! 🎉",
+        body: `Congratulations! Your application for "${opp?.title || "the opportunity"}" was accepted. You are officially selected!`,
+        link: "/volunteer/applications",
+      });
+
+      refresh();
+      toast.success(`Application accepted for ${volunteerName}! The volunteer has been notified.`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to accept application");
+    }
+  };
+
+  const markAttendance = async (appId: string, volunteerId: string, attendance: "present" | "absent") => {
+    try {
+      const { error } = await supabase.from("applications").update({ attendance }).eq("id", appId);
+      if (error) throw error;
+
+      await supabase.from("notifications").insert({
+        user_id: volunteerId,
+        title: `Attendance Marked: ${attendance === "present" ? "Present ✅" : "Absent"}`,
+        body: `Your attendance for "${opp?.title || "the event"}" has been marked as ${attendance}.`,
+        link: "/volunteer/applications",
+      });
+
+      refresh();
+      toast.success(`Marked attendance as ${attendance}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to update attendance");
+    }
+  };
+
+  const uploadCertificate = async (appId: string, volunteerId: string, file: File) => {
     if (file.size > 10 * 1024 * 1024) { toast.error("File must be under 10MB"); return; }
-    if (!/pdf|image\//.test(file.type)) { toast.error("Upload a PDF or image"); return; }
+    if (!/pdf|image\//.test(file.type)) { toast.error("Please upload a PDF or image"); return; }
     const ext = file.name.split(".").pop() ?? "pdf";
     const path = `${appId}/certificate-${Date.now()}.${ext}`;
-    const { error } = await supabase.storage.from("certificates").upload(path, file, { upsert: true });
-    if (error) { toast.error(error.message); return; }
-    update.mutate({ appId, patch: { certificate_url: path } });
+
+    const { error: uploadErr } = await supabase.storage.from("certificates").upload(path, file, { upsert: true });
+    if (uploadErr) { toast.error(uploadErr.message); return; }
+
+    const hrs = Number(hours[appId]) || 4;
+    // Update application with certificate_url and mark completed
+    await supabase.from("applications").update({
+      certificate_url: path,
+      status: "completed",
+      completed_at: new Date().toISOString(),
+      hours_logged: hrs,
+    }).eq("id", appId);
+
+    // Also register in certificates table so it appears everywhere
+    const code = "VC-" + Math.random().toString(36).substring(2, 9).toUpperCase();
+    await supabase.from("certificates").insert({
+      volunteer_id: volunteerId,
+      opportunity_id: id,
+      hours: hrs,
+      code,
+      issued_at: new Date().toISOString(),
+    });
+
+    // Notify volunteer
+    await supabase.from("notifications").insert({
+      user_id: volunteerId,
+      title: "Participation Certificate Uploaded! 📜",
+      body: `The host organization has uploaded your participation certificate for "${opp?.title || "the event"}". You can download it now from your certificates tab.`,
+      link: "/volunteer/certificates",
+    });
+
+    refresh();
+    toast.success("Certificate uploaded successfully and sent to volunteer!");
   };
 
   const removeFile = async (appId: string, path: string) => {
@@ -183,93 +254,222 @@ function Applicants() {
             const ans = answersRecord(a.answers);
             const hasAnswers = Object.keys(ans).length > 0;
             const cert = (certs ?? []).find((c) => c.volunteer_id === a.volunteer_id);
+            const applicantCity = p?.city || ans.city || "Pune";
+            const applicantPhone = p?.phone || ans.phone || "";
+            const applicantEmail = p?.email || ans.email || "";
+            const applicantExperience = p?.experience || ans.experience || "Passionate community volunteer";
+            const applicantName = p?.full_name || ans.full_name || "Volunteer";
+
             return (
-              <Card key={a.id}>
+              <Card key={a.id} className="overflow-hidden border border-border/80 shadow-sm transition hover:shadow-md">
                 <CardContent className="space-y-4 p-5">
-                  <div className="flex flex-wrap items-start gap-4">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
                     <div className="min-w-0 flex-1">
-                      <div className="mb-1 flex flex-wrap items-center gap-2">
-                        <Badge variant={a.status === "accepted" || a.status === "completed" ? "default" : a.status === "rejected" ? "destructive" : "secondary"} className="capitalize">{a.status}</Badge>
-                        {a.attendance && <Badge variant="outline" className="capitalize">{a.attendance}</Badge>}
+                      <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                        <Badge
+                          variant={
+                            a.status === "accepted"
+                              ? "default"
+                              : a.status === "completed"
+                              ? "outline"
+                              : a.status === "rejected"
+                              ? "destructive"
+                              : "secondary"
+                          }
+                          className={`capitalize font-medium ${
+                            a.status === "accepted" ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""
+                          }`}
+                        >
+                          {a.status === "accepted" ? "Selected / Accepted" : a.status}
+                        </Badge>
+                        {a.attendance && (
+                          <Badge
+                            variant={a.attendance === "present" ? "default" : "outline"}
+                            className={`capitalize text-xs ${
+                              a.attendance === "present" ? "bg-emerald-100 text-emerald-800 border-emerald-300" : ""
+                            }`}
+                          >
+                            Attendance: {a.attendance}
+                          </Badge>
+                        )}
                         <span className="text-xs text-muted-foreground">Applied {new Date(a.created_at).toLocaleDateString()}</span>
                       </div>
-                      <Link to="/volunteers/$id" params={{ id: a.volunteer_id }} className="font-display text-lg font-semibold hover:underline">{p?.full_name ?? "Unnamed volunteer"}</Link>
-                      <div className="text-sm text-muted-foreground">{[p?.city, p?.state, p?.country].filter(Boolean).join(", ")}</div>
-                      <div className="mt-1 grid gap-x-6 gap-y-0.5 text-sm sm:grid-cols-2">
-                        {p?.email && <div><span className="text-muted-foreground">Email:</span> {p.email}</div>}
-                        {p?.phone && <div><span className="text-muted-foreground">Phone:</span> {p.phone}</div>}
-                        {p?.occupation_status && <div className="capitalize"><span className="normal-case text-muted-foreground">Currently:</span> {p.occupation_status}{p.organization && <span className="normal-case"> — {p.organization}</span>}</div>}
-                        {p?.experience && <div className="sm:col-span-2"><span className="text-muted-foreground">Experience:</span> {p.experience}</div>}
+
+                      <Link to="/volunteers/$id" params={{ id: a.volunteer_id }} className="font-display text-lg font-semibold hover:underline">
+                        {applicantName}
+                      </Link>
+
+                      <div className="mt-1 text-xs text-muted-foreground font-medium">
+                        📍 City: <span className="text-foreground">{applicantCity}</span>
+                        {p?.state && <span>, {p.state}</span>}
+                        {p?.country && <span>, {p.country}</span>}
                       </div>
+
+                      <div className="mt-2 grid gap-x-6 gap-y-1 text-xs sm:grid-cols-2">
+                        {applicantPhone && (
+                          <div className="flex items-center gap-1.5">
+                            <Phone className="size-3.5 text-muted-foreground" />
+                            <span className="font-semibold text-foreground">{applicantPhone}</span>
+                            <a href={`tel:${applicantPhone}`} className="text-primary hover:underline ml-1">(Call)</a>
+                            <a href={`https://wa.me/${applicantPhone.replace(/\D/g, "")}`} target="_blank" rel="noreferrer" className="text-emerald-600 hover:underline ml-1 font-medium">(WhatsApp)</a>
+                          </div>
+                        )}
+                        {applicantEmail && (
+                          <div className="flex items-center gap-1.5">
+                            <Mail className="size-3.5 text-muted-foreground" />
+                            <a href={`mailto:${applicantEmail}`} className="text-primary hover:underline">{applicantEmail}</a>
+                          </div>
+                        )}
+                        {p?.occupation_status && (
+                          <div className="capitalize text-muted-foreground">
+                            <span>Currently:</span> <span className="font-medium text-foreground">{p.occupation_status}</span>
+                            {p.organization && <span> ({p.organization})</span>}
+                          </div>
+                        )}
+                      </div>
+
+                      {applicantExperience && (
+                        <div className="mt-2.5 rounded-xl bg-muted/60 p-2.5 text-xs">
+                          <span className="font-semibold text-foreground">Experience &amp; Skills:</span>{" "}
+                          <span className="text-muted-foreground">{applicantExperience}</span>
+                        </div>
+                      )}
+
                       {p?.skills && p.skills.length > 0 && (
-                        <div className="mt-2 flex flex-wrap gap-1">{p.skills.map((s) => <Badge key={s} variant="outline" className="text-xs">{s}</Badge>)}</div>
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {p.skills.map((s) => <Badge key={s} variant="outline" className="text-[11px]">{s}</Badge>)}
+                        </div>
                       )}
                     </div>
+
                     <div className="flex flex-wrap items-center gap-2">
                       <Button
                         size="sm"
                         variant="outline"
-                        className="rounded-full"
-                        onClick={() => openContact(p?.full_name ?? "Volunteer", a.volunteer_id, p?.email, p?.phone)}
+                        className="rounded-full text-xs"
+                        onClick={() => openContact(applicantName, a.volunteer_id, applicantEmail, applicantPhone)}
                       >
-                        <MessageSquare className="size-4" /> Message
+                        <MessageSquare className="size-3.5" /> Message
                       </Button>
+
                       {a.status === "pending" && (
                         <>
-                          <Button size="sm" className="rounded-full" onClick={() => update.mutate({ appId: a.id, patch: { status: "accepted", rejection_reason: null } })}><Check className="size-4" /> Accept</Button>
-                          <Button size="sm" variant="outline" className="rounded-full" onClick={() => { setRejecting(a.id); setReason(""); }}><X className="size-4" /> Reject</Button>
+                          <Button
+                            size="sm"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-full font-medium shadow-sm gap-1 text-xs"
+                            onClick={() => acceptApplication(a.id, a.volunteer_id, applicantName)}
+                          >
+                            <Check className="size-3.5" /> Accept Application
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="rounded-full text-destructive hover:bg-destructive/10 border-destructive/30 text-xs"
+                            onClick={() => { setRejecting(a.id); setReason(""); }}
+                          >
+                            <X className="size-3.5" /> Reject
+                          </Button>
                         </>
                       )}
                     </div>
                   </div>
 
-                  {hasAnswers ? (
-                    <dl className="grid gap-3 rounded-xl bg-muted p-4 text-sm sm:grid-cols-2">
-                      {questions.filter((q) => ans[q.id]).map((q) => (
-                        <div key={q.id}><dt className="text-xs font-semibold text-muted-foreground">{q.label}</dt><dd className="whitespace-pre-wrap">{ans[q.id]}</dd></div>
+                  {hasAnswers && (
+                    <dl className="grid gap-2 rounded-xl bg-muted/40 p-3 text-xs sm:grid-cols-2 border border-border/50">
+                      {questions.filter((q) => ans[q.id] && q.id !== "phone" && q.id !== "city" && q.id !== "experience").map((q) => (
+                        <div key={q.id}>
+                          <dt className="font-semibold text-muted-foreground">{q.label}</dt>
+                          <dd className="whitespace-pre-wrap text-foreground">{ans[q.id]}</dd>
+                        </div>
                       ))}
                     </dl>
-                  ) : a.message ? (
-                    <p className="whitespace-pre-wrap rounded-xl bg-muted p-4 text-sm">{a.message}</p>
-                  ) : null}
+                  )}
 
                   {a.status === "rejected" && a.rejection_reason && (
-                    <p className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">Reason: {a.rejection_reason}</p>
+                    <p className="rounded-lg bg-destructive/10 p-3 text-xs text-destructive">Rejection reason: {a.rejection_reason}</p>
                   )}
 
                   {(a.status === "accepted" || a.status === "completed") && (
-                    <div className="flex flex-wrap items-center gap-2 border-t pt-4">
-                      <span className="mr-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Attendance</span>
-                      <Button size="sm" variant={a.attendance === "present" ? "default" : "outline"} className="rounded-full" onClick={() => update.mutate({ appId: a.id, patch: { attendance: "present" } })}><UserCheck className="size-4" /> Present</Button>
-                      <Button size="sm" variant={a.attendance === "absent" ? "destructive" : "outline"} className="rounded-full" onClick={() => update.mutate({ appId: a.id, patch: { attendance: "absent" } })}><UserX className="size-4" /> Absent</Button>
-                    </div>
-                  )}
-
-                  {(a.status === "accepted" || a.status === "completed") && (
-                    <div className="flex flex-wrap items-center gap-2">
-                      {a.status === "accepted" && (
-                        <>
-                          <Input type="number" min={1} placeholder="Hours" className="h-9 w-24" value={hours[a.id] ?? ""} onChange={(e) => setHours((h) => ({ ...h, [a.id]: e.target.value }))} />
-                          <Button size="sm" className="rounded-full" disabled={complete.isPending || a.attendance === "absent"} onClick={() => complete.mutate({ appId: a.id, hoursLogged: Number(hours[a.id]) || undefined })}>
-                            <Award className="size-4" /> Complete &amp; grant certificate
-                          </Button>
-                        </>
-                      )}
-                      <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-sm hover:bg-muted">
-                        <Upload className="size-4" /> {a.certificate_url ? "Replace certificate file" : "Upload certificate file"}
-                        <input type="file" accept="application/pdf,image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(a.id, f); e.target.value = ""; }} />
-                      </label>
-                      {a.certificate_url && (
-                        <>
-                          <Button size="sm" variant="ghost" className="rounded-full" onClick={() => viewFile(a.certificate_url!)}><FileText className="size-4" /> View uploaded</Button>
-                          <Button size="sm" variant="ghost" className="rounded-full text-destructive" onClick={() => removeFile(a.id, a.certificate_url!)}>Delete uploaded</Button>
-                        </>
-                      )}
-                      {cert && (
-                        <Button asChild size="sm" variant="outline" className="rounded-full">
-                          <Link to="/certificates/$code" params={{ code: cert.code }}><BadgeCheck className="size-4" /> Certificate · {cert.hours ?? 0}h</Link>
+                    <div className="space-y-3 border-t pt-4">
+                      {/* ATTENDANCE SECTION */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="mr-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Attendance:</span>
+                        <Button
+                          size="sm"
+                          variant={a.attendance === "present" ? "default" : "outline"}
+                          className={`rounded-full gap-1.5 text-xs ${a.attendance === "present" ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""}`}
+                          onClick={() => markAttendance(a.id, a.volunteer_id, "present")}
+                        >
+                          <UserCheck className="size-3.5" /> Mark Present
                         </Button>
-                      )}
+                        <Button
+                          size="sm"
+                          variant={a.attendance === "absent" ? "destructive" : "outline"}
+                          className="rounded-full gap-1.5 text-xs"
+                          onClick={() => markAttendance(a.id, a.volunteer_id, "absent")}
+                        >
+                          <UserX className="size-3.5" /> Mark Absent
+                        </Button>
+                      </div>
+
+                      {/* CERTIFICATE SECTION */}
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        <span className="mr-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Certificate:</span>
+                        <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-primary/40 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 transition">
+                          <Upload className="size-3.5" /> {a.certificate_url ? "Replace Certificate File" : "Upload Participation Certificate"}
+                          <input
+                            type="file"
+                            accept="application/pdf,image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) void uploadCertificate(a.id, a.volunteer_id, f);
+                              e.target.value = "";
+                            }}
+                          />
+                        </label>
+
+                        {a.certificate_url && (
+                          <>
+                            <Button size="sm" variant="outline" className="rounded-full text-xs gap-1" onClick={() => viewFile(a.certificate_url!)}>
+                              <FileText className="size-3.5 text-primary" /> View Uploaded
+                            </Button>
+                            <Button size="sm" variant="ghost" className="rounded-full text-xs text-destructive hover:bg-destructive/10" onClick={() => removeFile(a.id, a.certificate_url!)}>
+                              Delete
+                            </Button>
+                          </>
+                        )}
+
+                        {a.status === "accepted" && (
+                          <div className="flex items-center gap-2">
+                            <Input
+                              type="number"
+                              min={1}
+                              placeholder="Hours"
+                              className="h-8 w-20 text-xs"
+                              value={hours[a.id] ?? ""}
+                              onChange={(e) => setHours((h) => ({ ...h, [a.id]: e.target.value }))}
+                            />
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="rounded-full text-xs gap-1.5"
+                              disabled={complete.isPending || a.attendance === "absent"}
+                              onClick={() => complete.mutate({ appId: a.id, hoursLogged: Number(hours[a.id]) || undefined })}
+                            >
+                              <Award className="size-3.5" /> Grant Digital Certificate
+                            </Button>
+                          </div>
+                        )}
+
+                        {cert && (
+                          <Button asChild size="sm" variant="outline" className="rounded-full text-xs">
+                            <Link to="/certificates/$code" params={{ code: cert.code }}>
+                              <BadgeCheck className="size-3.5" /> Verified Cert · {cert.hours ?? 0}h
+                            </Link>
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   )}
                 </CardContent>

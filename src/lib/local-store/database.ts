@@ -43,6 +43,7 @@ type ChannelCallback = (payload: { eventType: string; new: Record<string, unknow
 
 const STORAGE_KEY = "vc_local_database_v2";
 const SESSION_KEY = "vc_local_session_v2";
+const FILES_STORAGE_KEY = "vc_local_files_v2";
 
 export class LocalDatabaseEngine {
   private static instance: LocalDatabaseEngine;
@@ -76,6 +77,12 @@ export class LocalDatabaseEngine {
         const storedSession = window.localStorage.getItem(SESSION_KEY);
         if (storedSession) {
           this.currentSession = JSON.parse(storedSession);
+        }
+
+        const storedFiles = window.localStorage.getItem(FILES_STORAGE_KEY);
+        if (storedFiles) {
+          const parsed = JSON.parse(storedFiles);
+          this.files = new Map(Object.entries(parsed));
         }
       } catch (e) {
         console.warn("Failed to load local database from localStorage, initializing defaults", e);
@@ -215,17 +222,22 @@ export class LocalDatabaseEngine {
     users.push(newUser);
     this.setTable("users", users);
 
-    // Auto-create profile
+    // Auto-create profile with complete applicant details
     const profiles = this.getTable("profiles");
     profiles.push({
       id: userId,
       full_name: fullName,
       avatar_url: avatarUrl,
-      skills: [],
-      interests: [],
+      skills: (params.options?.data?.skills as string[]) || [],
+      interests: (params.options?.data?.interests as string[]) || [],
       languages: ["English"],
-      city: "Mumbai",
-      country: "India",
+      city: (params.options?.data?.city as string) || "Pune",
+      state: (params.options?.data?.state as string) || "Maharashtra",
+      country: (params.options?.data?.country as string) || "India",
+      phone: (params.options?.data?.phone as string) || "",
+      experience: (params.options?.data?.experience as string) || "",
+      occupation_status: (params.options?.data?.occupation_status as string) || (requestedRole === "volunteer" ? "student" : "working"),
+      organization: (params.options?.data?.organization as string) || "",
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     });
@@ -520,6 +532,17 @@ export class LocalDatabaseEngine {
     }
   }
 
+  private persistFiles() {
+    if (typeof window !== "undefined" && window.localStorage) {
+      try {
+        const obj = Object.fromEntries(this.files.entries());
+        window.localStorage.setItem(FILES_STORAGE_KEY, JSON.stringify(obj));
+      } catch (e) {
+        console.warn("Storage quota warning for files", e);
+      }
+    }
+  }
+
   // --- Storage API ---
 
   public storage = {
@@ -537,6 +560,8 @@ export class LocalDatabaseEngine {
             });
           }
           this.files.set(`${bucket}:${path}`, content);
+          this.files.set(path, content);
+          this.persistFiles();
           return { data: { path }, error: null };
         } catch (e) {
           return { data: null, error: e as Error };
@@ -545,15 +570,22 @@ export class LocalDatabaseEngine {
       remove: async (paths: string[]) => {
         for (const p of paths) {
           this.files.delete(`${bucket}:${p}`);
+          this.files.delete(p);
         }
+        this.persistFiles();
         return { data: paths, error: null };
       },
       createSignedUrl: async (path: string, _expiresIn: number, _opts?: { download?: boolean }) => {
-        const url = this.files.get(`${bucket}:${path}`) || `/placeholder-cert-${path.replace(/[^a-zA-Z0-9]/g, "_")}.pdf`;
-        return { data: { signedUrl: url }, error: null };
+        const url = this.files.get(`${bucket}:${path}`) || this.files.get(path);
+        if (url) {
+          return { data: { signedUrl: url }, error: null };
+        }
+        // Fallback placeholder verified certificate data-URI
+        const fallbackSvg = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="550" viewBox="0 0 800 550"><rect width="800" height="550" fill="%23f8fafc" stroke="%232563eb" stroke-width="8"/><text x="400" y="140" font-family="Arial, sans-serif" font-size="28" font-weight="bold" fill="%231e3a8a" text-anchor="middle">VOLUNTEER CONNECT</text><text x="400" y="190" font-family="Arial, sans-serif" font-size="20" fill="%2364748b" text-anchor="middle">OFFICIAL PARTICIPATION CERTIFICATE</text><text x="400" y="290" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="%230f172a" text-anchor="middle">COMMUNITY CIVIC SERVICE AWARD</text><text x="400" y="340" font-family="Arial, sans-serif" font-size="16" fill="%23475569" text-anchor="middle">Awarded in recognition of active volunteering and dedication.</text><text x="400" y="470" font-family="Arial, sans-serif" font-size="14" fill="%2316a34a" font-weight="bold" text-anchor="middle">&#10003; Verified by Host NGO</text></svg>`;
+        return { data: { signedUrl: fallbackSvg }, error: null };
       },
       getPublicUrl: (path: string) => {
-        const url = this.files.get(`${bucket}:${path}`) || `https://volunteer-connect.local/storage/${bucket}/${path}`;
+        const url = this.files.get(`${bucket}:${path}`) || this.files.get(path) || `https://volunteer-connect.local/storage/${bucket}/${path}`;
         return { data: { publicUrl: url } };
       },
     }),
@@ -666,6 +698,9 @@ export class LocalDatabaseEngine {
           .filter((p) => ids.includes(p.id as string))
           .map((p) => ({
             id: p.id,
+            city: p.city || "Pune",
+            state: p.state || "Maharashtra",
+            country: p.country || "India",
             phone: p.phone || "+91 98765 00000",
             occupation_status: p.occupation_status || "Volunteer",
             organization: p.organization || "Independent",
