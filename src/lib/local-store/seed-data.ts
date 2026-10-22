@@ -33,13 +33,13 @@ export const INITIAL_USERS = [
   },
   {
     id: "33333333-3333-3333-3333-333333333333",
-    email: "sohamawati21@gmail.com",
-    password: "Soham@123",
+    email: "volunteer3@example.com",
+    password: "Volunteer@123",
     created_at: "2026-02-02T00:00:00.000Z",
     email_confirmed_at: "2026-02-02T00:00:00.000Z",
     role: "volunteer",
     user_metadata: {
-      full_name: "Soham Awati",
+      full_name: "Aditya Joshi",
       requested_role: "volunteer",
       avatar_url: "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=200&auto=format&fit=crop",
     },
@@ -141,7 +141,7 @@ export const INITIAL_PROFILES = [
   },
   {
     id: "33333333-3333-3333-3333-333333333333",
-    full_name: "Soham Awati",
+    full_name: "Aditya Joshi",
     avatar_url: "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=200&auto=format&fit=crop",
     bio: "Animal welfare enthusiast and youth tutor passionate about empowering students and rescue animals.",
     skills: ["Animal Handling", "Teaching", "Mathematics", "Communication"],

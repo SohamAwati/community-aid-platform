@@ -66,7 +66,7 @@ For development and evaluation, a pre-configured Super Admin account is availabl
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/SohamAwati/community-aid-platform.git
+   git clone https://github.com/community-aid-platform/community-aid-platform.git
    cd community-aid-platform
    ```
 
